@@ -1,0 +1,37 @@
+.dark-navbar {
+  background: linear-gradient(135deg, #1f2937 0%, #374151 100%) !important;
+  border: 1px solid #374151 !important;
+  border-radius: 8px !important;
+}
+
+.dark-navbar .p-menuitem-link {
+  color: #f9fafb !important;
+  border-radius: 6px !important;
+  margin: 0 4px !important;
+}
+
+.dark-navbar .p-menuitem-link:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+}
+
+.dark-navbar .p-menuitem.p-menuitem-active > .p-menuitem-link {
+  background: rgba(59, 130, 246, 0.3) !important;
+  color: #60a5fa !important;
+}
+
+.dark-navbar .p-menubar-start {
+  color: #f9fafb !important;
+}
+
+.dark-navbar .p-menubar-end {
+  color: #f9fafb !important;
+}
+
+.dark-navbar .p-button-text {
+  color: #f9fafb !important;
+}
+
+.dark-navbar .p-button-text:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
