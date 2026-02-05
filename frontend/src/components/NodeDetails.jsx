@@ -1,9 +1,9 @@
-import { Card } from "primereact/card";
-import { Button } from "primereact/button";
+import { Button } from "primereact/button"
 import { Tag } from "primereact/tag";
 import { Divider } from "primereact/divider";
+import CustomIcon from "./CustomIcon";
 
-const NodeDetails = ({ node, onCreateFolder, onCreateFile }) => {
+const NodeDetails = ({ node, onCreateFolder, onCreateFile, onEditNode, onDeleteNode }) => {
   if (!node) {
     return (
       <div className="text-center py-8">
@@ -13,71 +13,6 @@ const NodeDetails = ({ node, onCreateFolder, onCreateFile }) => {
       </div>
     );
   }
-
-  const getFileIcon = (node) => {
-    if (node.type === 'folder') {
-      return 'pi pi-folder text-yellow-500';
-    }
-    
-    const extension = node.name.split('.').pop()?.toLowerCase();
-    switch (extension) {
-      case 'pdf':
-        return 'pi pi-file-pdf text-red-500';
-      case 'doc':
-      case 'docx':
-        return 'pi pi-file-word text-blue-500';
-      case 'xls':
-      case 'xlsx':
-        return 'pi pi-file-excel text-green-500';
-      case 'ppt':
-      case 'pptx':
-        return 'pi pi-file text-orange-500';
-      case 'jpg':
-      case 'jpeg':
-      case 'png':
-      case 'gif':
-      case 'bmp':
-      case 'svg':
-        return 'pi pi-image text-purple-500';
-      case 'mp4':
-      case 'avi':
-      case 'mov':
-      case 'wmv':
-        return 'pi pi-video text-indigo-500';
-      case 'mp3':
-      case 'wav':
-      case 'flac':
-        return 'pi pi-volume-up text-pink-500';
-      case 'zip':
-      case 'rar':
-      case '7z':
-        return 'pi pi-file-archive text-orange-500';
-      case 'txt':
-      case 'md':
-        return 'pi pi-file-edit text-gray-500';
-      case 'js':
-      case 'jsx':
-        return 'pi pi-code text-yellow-600';
-      case 'ts':
-      case 'tsx':
-        return 'pi pi-code text-blue-600';
-      case 'html':
-        return 'pi pi-globe text-orange-600';
-      case 'css':
-      case 'scss':
-        return 'pi pi-palette text-blue-400';
-      case 'json':
-        return 'pi pi-code text-green-600';
-      case 'py':
-        return 'pi pi-code text-blue-500';
-      case 'java':
-        return 'pi pi-code text-red-600';
-      case 'php':
-        return 'pi pi-code text-purple-600';
-      default:
-        return 'pi pi-file text-gray-600';
-    }
-  };
 
   const getFileSize = (node) => {
     // Mock file size for demonstration
@@ -95,7 +30,10 @@ const NodeDetails = ({ node, onCreateFolder, onCreateFile }) => {
       return { folders, files, total: folders + files };
     }
     return null;
+    
   };
+
+  
 
   const formatDate = (dateString) => {
     try {
@@ -109,10 +47,10 @@ const NodeDetails = ({ node, onCreateFolder, onCreateFile }) => {
   const fileSize = getFileSize(node);
 
   return (
-    <div className="p-4">
+    <div className="p-4  overflow-auto">
       {/* Header */}
       <div className="flex align-items-center gap-3 mb-4">
-        <i className={`${getFileIcon(node)} text-3xl`}></i>
+        <CustomIcon type={node.type} size={32} className="text-600" />
         <div>
           <h3 className="text-xl font-bold m-0 text-900">{node.name}</h3>
           <Tag 
@@ -128,8 +66,8 @@ const NodeDetails = ({ node, onCreateFolder, onCreateFile }) => {
       {/* Properties */}
       <div className="grid">
         <div className="col-12">
-          <div className="surface-50 border-round p-3 mb-3">
-            <h4 className="text-900 font-semibold mb-3">Properties</h4>
+          <div className="surface-50 border-round ">
+            <h4 className="text-900 font-semibold ">Properties</h4>
             
             <div className="flex justify-content-between align-items-center mb-2">
               <span className="text-600">ID:</span>
@@ -171,10 +109,10 @@ const NodeDetails = ({ node, onCreateFolder, onCreateFile }) => {
           </div>
         </div>
 
-        {/* Children Info for Folders */}
+        
         {node.type === 'folder' && (
           <div className="col-12">
-            <div className="surface-50 border-round p-3 mb-3">
+            <div className="surface-50 border-round ">
               <h4 className="text-900 font-semibold mb-3">Contents</h4>
               
               {childrenCount && childrenCount.total > 0 ? (
@@ -184,10 +122,6 @@ const NodeDetails = ({ node, onCreateFolder, onCreateFile }) => {
                     <Tag value={childrenCount.total} severity="info" />
                   </div>
                   
-                  <div className="flex justify-content-between align-items-center mb-2">
-                    <span className="text-600">Folders:</span>
-                    <Tag value={childrenCount.folders} severity="warning" />
-                  </div>
                   
                   <div className="flex justify-content-between align-items-center mb-2">
                     <span className="text-600">Files:</span>
@@ -213,15 +147,26 @@ const NodeDetails = ({ node, onCreateFolder, onCreateFile }) => {
               {node.type === 'folder' && (
                 <>
                   <Button
-                    label="Add New "
-                    icon="pi pi-folder"
+                    label="Add new"
                     className="p-button-success p-button-sm"
                     onClick={() => onCreateFolder(node)}
                   />
-               
+                 
                 </>
               )}
-                          </div>
+              
+              <Button
+                label="Edit"
+                className="p-button-warning p-button-sm"
+                onClick={() => onEditNode(node)}
+              />
+              
+              <Button
+                label="Delete"
+                className="p-button-danger p-button-sm"
+                onClick={() => onDeleteNode(node)}
+              />
+            </div>
           </div>
         </div>
       </div>

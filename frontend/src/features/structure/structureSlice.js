@@ -26,6 +26,18 @@ export const createStructureNode = createAsyncThunk(
   }
 );
 
+export const updateStructureNode = createAsyncThunk(
+  "structure/updateNode",
+  async ({ nodeId, updates }, { rejectWithValue }) => {
+    try {
+      const response = await api.put(`/structure/${nodeId}`, updates);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.error || "Failed to update node");
+    }
+  }
+);
+
 export const deleteStructureNode = createAsyncThunk(
   "structure/deleteNode",
   async (nodeId, { rejectWithValue }) => {
@@ -91,6 +103,19 @@ const structureSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
+      // Update node
+      .addCase(updateStructureNode.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(updateStructureNode.fulfilled, (state, action) => {
+        state.loading = false;
+        // Refresh will be handled by component
+      })
+      .addCase(updateStructureNode.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
       // Delete node
       .addCase(deleteStructureNode.pending, (state) => {
         state.loading = true;
@@ -109,3 +134,4 @@ const structureSlice = createSlice({
 
 export const { setSelectedNode, toggleNodeExpansion, clearError } = structureSlice.actions;
 export default structureSlice.reducer;
+

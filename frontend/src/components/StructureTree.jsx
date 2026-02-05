@@ -3,6 +3,7 @@ import { Tree } from "primereact/tree";
 import { ContextMenu } from "primereact/contextmenu";
 import { Button } from "primereact/button";
 import { Badge } from "primereact/badge";
+import CustomIcon from "./CustomIcon";
 
 
 const StructureTree = ({
@@ -10,6 +11,8 @@ const StructureTree = ({
   onNodeSelect,
   onCreateFolder,
   onCreateFile,
+  onEditNode,
+  onDeleteNode,
   selectedNode
 }) => {
   const [contextMenuItems] = useState([
@@ -33,12 +36,22 @@ const StructureTree = ({
     },
     { separator: true },
     {
+      label: "Edit",
+      icon: "pi pi-pencil",
+      command: () => {
+        if (contextMenuNode) {
+          onEditNode(contextMenuNode);
+        }
+      }
+    },
+    {
       label: "Delete",
       icon: "pi pi-trash",
       className: "text-red-500",
       command: () => {
-        // TODO: Implement delete functionality
-        console.log("Delete:", contextMenuNode);
+        if (contextMenuNode) {
+          onDeleteNode(contextMenuNode);
+        }
       }
     }
   ]);
@@ -52,57 +65,11 @@ const StructureTree = ({
       key: node.id.toString(),
       label: node.name,
       data: node,
-      icon: getNodeIcon(node),
       children: node.children ? convertToTreeNodes(node.children) : [],
       leaf: node.type === 'file',
       selectable: true,
     }));
-  };
-
-  const getNodeIcon = (node) => {
-    if (node.type === 'folder') {
-      return 'pi pi-folder';
-    }
-
-    // File icons based on extension
-    const extension = node.name.split('.').pop()?.toLowerCase();
-    switch (extension) {
-      case 'pdf':
-        return 'pi pi-file-pdf';
-      case 'doc':
-      case 'docx':
-        return 'pi pi-file-word';
-      case 'xls':
-      case 'xlsx':
-        return 'pi pi-file-excel';
-      case 'jpg':
-      case 'jpeg':
-      case 'png':
-      case 'gif':
-        return 'pi pi-image';
-      case 'mp4':
-      case 'avi':
-      case 'mov':
-        return 'pi pi-video';
-      case 'mp3':
-      case 'wav':
-        return 'pi pi-volume-up';
-      case 'zip':
-      case 'rar':
-        return 'pi pi-file-archive';
-      case 'txt':
-        return 'pi pi-file-edit';
-      case 'js':
-      case 'jsx':
-      case 'ts':
-      case 'tsx':
-        return 'pi pi-code';
-      case 'html':
-      case 'css':
-        return 'pi pi-globe';
-      default:
-        return 'pi pi-file';
-    }
+    
   };
 
   const treeNodes = convertToTreeNodes(nodes);
@@ -121,7 +88,11 @@ const StructureTree = ({
         }}
         onClick={() => onNodeSelect(node.data)}
       >
-        <i className={`${node.icon} ${isSelected ? 'text-primary-700' : 'text-600'}`}></i>
+        <CustomIcon 
+          type={node.data.type} 
+          size={20} 
+          className={isSelected ? 'text-primary-700' : 'text-600'} 
+        />
         <span className={`font-medium ${isSelected ? 'text-primary-700' : 'text-900'}`}>
           {node.label}
         </span>

@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   fetchStructure,
   createStructureNode,
+  updateStructureNode,
+  deleteStructureNode,
   setSelectedNode,
   clearError,
 } from "../features/structure/structureSlice";
@@ -17,18 +19,25 @@ import { Toolbar } from "primereact/toolbar";
 import { Splitter, SplitterPanel } from "primereact/splitter";
 import { Panel } from "primereact/panel";
 import { Badge } from "primereact/badge";
+import { ConfirmDialog } from "primereact/confirmdialog";
 import { toast } from "react-toastify";
 
 import StructureTree from "../components/StructureTree";
 import NodeDetails from "../components/NodeDetails";
 import CreateNodeDialog from "../components/CreateNodeDialog";
+import EditNodeDialog from "../components/EditNodeDialog";
+import CustomIcon from "../components/CustomIcon";
+
 
 const StructurePage = () => {
   const dispatch = useDispatch();
   const { tree, loading, error, selectedNode } = useSelector((state) => state.structure);
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [parentForNewNode, setParentForNewNode] = useState(null);
+  const [nodeToEdit, setNodeToEdit] = useState(null);
+
 
   useEffect(() => {
     dispatch(fetchStructure());
@@ -66,21 +75,63 @@ const StructurePage = () => {
     setShowCreateDialog(true);
   };
 
+  const handleEditNode = (node) => {
+    setNodeToEdit(node);
+    setShowEditDialog(true);
+  };
+
+  const handleUpdateNode = (updates) => {
+    if (!nodeToEdit) return;
+    
+    dispatch(updateStructureNode({ nodeId: nodeToEdit.id, updates })).then((result) => {
+      if (result.type === "structure/updateNode/fulfilled") {
+        toast.success(`${nodeToEdit.type === 'folder' ? 'Folder' : 'File'} updated successfully!`);
+        dispatch(fetchStructure()); // Refresh tree
+        setShowEditDialog(false);
+        setNodeToEdit(null);
+        // Update selected node if it was the one being edited
+        if (selectedNode && selectedNode.id === nodeToEdit.id) {
+          dispatch(setSelectedNode({ ...nodeToEdit, ...updates }));
+        }
+      }
+    });
+  };
+
+  const handleDeleteNode = (node) => {
+    if (!node) return;
+    
+    // Show confirmation dialog
+    import('primereact/confirmdialog').then(({ confirmDialog }) => {
+      confirmDialog({
+        message: `Are you sure you want to delete "${node.name}"?`,
+        header: 'Delete Confirmation',
+        icon: 'pi pi-exclamation-triangle',
+        acceptClassName: 'p-button-danger',
+        accept: () => {
+          dispatch(deleteStructureNode(node.id)).then((result) => {
+            if (result.type === "structure/deleteNode/fulfilled") {
+              toast.success(`${node.type === 'folder' ? 'Folder' : 'File'} deleted successfully!`);
+              dispatch(fetchStructure()); // Refresh tree
+              // Clear selection if deleted node was selected
+              if (selectedNode && selectedNode.id === node.id) {
+                dispatch(setSelectedNode(null));
+              }
+            }
+          });
+        }
+      });
+    });
+  };
+
   const toolbarStartContent = (
     <div className="flex gap-2">
       <Button
         label="New Folder"
-        icon="pi pi-folder"
+        
         className="p-button-success"
         onClick={() => handleCreateFolder()}
       />
-      <Button
-        label="New File"
-        icon="pi pi-file"
-        className="p-button-info"
-        onClick={() => handleCreateFile(selectedNode)}
-        disabled={!selectedNode || selectedNode.type !== 'folder'}
-      />
+      
     </div>
   );
 
@@ -99,6 +150,8 @@ const StructurePage = () => {
 
   return (
     <div className="p-4">
+      <ConfirmDialog />
+      
       <Card title="📁 File Structure Manager" className="mb-4">
         <Toolbar start={toolbarStartContent} end={toolbarEndContent} className="mb-4" />
         
@@ -142,6 +195,8 @@ const StructurePage = () => {
                   onNodeSelect={(node) => dispatch(setSelectedNode(node))}
                   onCreateFolder={handleCreateFolder}
                   onCreateFile={handleCreateFile}
+                  onEditNode={handleEditNode}
+                  onDeleteNode={handleDeleteNode}
                   selectedNode={selectedNode}
                 />
               )}
@@ -154,6 +209,8 @@ const StructurePage = () => {
                 node={selectedNode}
                 onCreateFolder={handleCreateFolder}
                 onCreateFile={handleCreateFile}
+                onEditNode={handleEditNode}
+                onDeleteNode={handleDeleteNode}
               />
             </Panel>
           </SplitterPanel>
@@ -168,6 +225,16 @@ const StructurePage = () => {
         }}
         onSubmit={handleCreateNode}
         parentNode={parentForNewNode}
+      />
+
+      <EditNodeDialog
+        visible={showEditDialog}
+        onHide={() => {
+          setShowEditDialog(false);
+          setNodeToEdit(null);
+        }}
+        onSubmit={handleUpdateNode}
+        node={nodeToEdit}
       />
     </div>
   );

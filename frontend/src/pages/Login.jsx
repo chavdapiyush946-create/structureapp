@@ -7,10 +7,13 @@ import { Button } from "primereact/button";
 import { toast } from "react-toastify";
 import { useNavigate, Link } from "react-router-dom";
 
+
 const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { loading } = useSelector((s) => s.auth);
+
+
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -71,12 +74,11 @@ const Login = () => {
             loading={loading}
             className="w-full"
           />
-
           <p className="text-center text-sm mt-2">
             Don’t have an account?{" "}
             <Link to="/register" className="text-primary font-medium">
               Register
-            </Link>
+            </Link>            
           </p>
         </form>
       </Card>

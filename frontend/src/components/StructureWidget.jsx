@@ -4,8 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { fetchStructure } from "../features/structure/structureSlice";
 import { Card } from "primereact/card";
 import { Button } from "primereact/button";
-import FileIcon from "./FileIcon";
-
+import { Badge } from "primereact/badge";
+import CustomIcon from "./CustomIcon";
 
 const StructureWidget = () => {
   const dispatch = useDispatch();
@@ -47,11 +47,11 @@ const StructureWidget = () => {
           <div className="text-900 font-medium text-3xl">{stats.total}</div>
           <div className="text-purple-500 text-sm mt-2">
             <div className="flex align-items-center gap-2 mb-1">
-              <FileIcon type="folder" size="text-sm" />
+              <CustomIcon type="folder" size={16} className="text-purple-500" />
               <span>{stats.folders} folders</span>
             </div>
             <div className="flex align-items-center gap-2">
-              <FileIcon fileName="file.txt" size="text-sm" />
+              <CustomIcon type="file" size={16} className="text-purple-500" />
               <span>{stats.files} files</span>
             </div>
           </div>
@@ -61,9 +61,14 @@ const StructureWidget = () => {
             className="flex align-items-center justify-content-center bg-purple-100 border-round" 
             style={{width: '3rem', height: '3rem'}}
           >
-            <i className="pi pi-folder text-purple-500 text-2xl"></i>
+            <CustomIcon type="folder" size={24} className="text-purple-500" />
           </div>
-          
+          <Button
+            label="Manage"
+            size="small"
+            className="p-button-purple p-button-outlined p-button-sm"
+            onClick={() => navigate("/structure")}
+          />
         </div>
       </div>
       
@@ -77,3 +82,4 @@ const StructureWidget = () => {
 };
 
 export default StructureWidget;
+

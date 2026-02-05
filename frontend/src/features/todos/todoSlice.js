@@ -3,7 +3,7 @@ import api from "../../services/api.js";
 
 export const fetchTodos = createAsyncThunk(
   "todos/fetchTodos",
-  async (thunkAPI) => {
+  async (_,{thunkAPI}) => {
     try {
       const token = localStorage.getItem("auth")
         ? JSON.parse(localStorage.getItem("auth")).token
