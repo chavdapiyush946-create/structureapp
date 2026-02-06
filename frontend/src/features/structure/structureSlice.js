@@ -105,41 +105,32 @@ const structureSlice = createSlice({
       })
       // Create node
       .addCase(createStructureNode.pending, (state) => {
-        state.loading = true;
         state.error = null;
       })
       .addCase(createStructureNode.fulfilled, (state, action) => {
-        state.loading = false;
-        
+        // No loading state change - will refresh silently
       })
       .addCase(createStructureNode.rejected, (state, action) => {
-        state.loading = false;
         state.error = action.payload;
       })
       // Update node
       .addCase(updateStructureNode.pending, (state) => {
-        state.loading = true;
         state.error = null;
       })
       .addCase(updateStructureNode.fulfilled, (state, action) => {
-        state.loading = false;
-        // Refresh will be handled by component
+        // No loading state change - will refresh silently
       })
       .addCase(updateStructureNode.rejected, (state, action) => {
-        state.loading = false;
         state.error = action.payload;
       })
       // Delete node
       .addCase(deleteStructureNode.pending, (state) => {
-        state.loading = true;
         state.error = null;
       })
       .addCase(deleteStructureNode.fulfilled, (state, action) => {
-        state.loading = false;
-        // Refresh will be handled by component
+        // No loading state change - will refresh silently
       })
       .addCase(deleteStructureNode.rejected, (state, action) => {
-        state.loading = false;
         state.error = action.payload;
       })
       // Fetch folder children

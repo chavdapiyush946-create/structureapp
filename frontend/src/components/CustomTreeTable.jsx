@@ -10,23 +10,26 @@ const CustomTreeTable = ({
   onEditNode, 
   onDeleteNode,
   onFetchChildren, 
-  loadingChildren = {}, // Track which folders are loading
+  loadingChildren = {},
   loading = false,
+  expandedNodes: externalExpandedNodes,
+  onExpandedNodesChange,
 }) => {
-  const [expandedNodes, setExpandedNodes] = useState(new Set());
-
+  const [internalExpandedNodes, setInternalExpandedNodes] = useState(new Set());
+  
+  // Use external state if provided, otherwise use internal state
+  const expandedNodes = externalExpandedNodes || internalExpandedNodes;
+  const setExpandedNodes = onExpandedNodesChange || setInternalExpandedNodes;
   const toggleExpansion = async (node) => {
     const nodeId = node.id;
     const newExpanded = new Set(expandedNodes);
-    
     if (newExpanded.has(nodeId)) {
-      // Collapse
       newExpanded.delete(nodeId);
     } else {
       // Expand
       newExpanded.add(nodeId);
       
-      // Lazy load children if not already loaded
+      
       if (node.type === 'folder' && !node.childrenLoaded && onFetchChildren) {
         await onFetchChildren(nodeId);
       }
@@ -40,17 +43,19 @@ const CustomTreeTable = ({
     const hasChildren = node.children && node.children.length > 0;
     const isLoadingChildren = loadingChildren[node.id];
     const indentStyle = { paddingLeft: `${level * 20}px` };
+    const isFolder = node.type === 'folder';
+    const isEmpty = isFolder && isExpanded && !hasChildren && !isLoadingChildren && node.childrenLoaded;
 
     return (
       <div key={node.id}>
         {/* Main Row */}
-        <div className="custom-tree-row p-2 hover:surface-100">
+        <div className="custom-tree-row p-2 hover:surface-100 border-round transition-colors transition-duration-150">
           <div className="grid align-items-center">
             {/* Name Column */}
             <div className="col-6">
               <div className="flex align-items-center gap-2" style={indentStyle}>
                 {/* Expand/Collapse Button */}
-                {node.type === 'folder' ? (
+                {isFolder ? (
                   <Button
                     icon={isLoadingChildren ? "pi pi-spin pi-spinner" : (isExpanded ? "pi pi-chevron-down" : "pi pi-chevron-right")}
                     className="p-button-text p-button-rounded p-button-sm"
@@ -61,13 +66,12 @@ const CustomTreeTable = ({
                 ) : (
                   <div style={{ width: '2rem' }}></div>
                 )}
-                
-                {/* Icon and Name */}
+                                
                 <CustomIcon type={node.type} size={18} />
                 <span className="font-medium text-900">{node.name}</span>
                 {isLoadingChildren && <span className="text-500 text-sm ml-2">(loading...)</span>}
               </div>
-            </div>
+            </div>            
 
             {/* Type Column */}
             <div className="col-2">
@@ -81,7 +85,7 @@ const CustomTreeTable = ({
             {/* Actions Column */}
             <div className="col-4">
               <div className="flex gap-1 justify-content-end">
-                {node.type === 'folder' && (
+                {isFolder && (
                   <>
                     <Button
                       icon="pi pi-folder-plus"
@@ -118,6 +122,16 @@ const CustomTreeTable = ({
           </div>
         </div>
 
+        {/* Empty Folder Message */}
+        {isEmpty && (
+          <div style={{ paddingLeft: `${(level + 1) * 20 + 40}px` }} className="p-3">
+            <div className="flex align-items-center gap-3 text-500 text-sm surface-50 border-round p-3 border-1 border-dashed surface-border">
+              <i className="pi pi-inbox text-xl"></i>
+              <span className="flex-grow-1">This folder is empty</span>
+                        </div>
+          </div>
+        )}
+
         {/* Children Rows */}
         {hasChildren && isExpanded && (
           <div>
@@ -148,6 +162,20 @@ const CustomTreeTable = ({
           <i className="pi pi-folder-open text-6xl text-400 mb-4"></i>
           <div className="text-900 font-medium text-xl mb-2">No structure yet</div>
           <div className="text-600 mb-4">Create your first folder or file to get started!</div>
+          <div className="flex gap-2 justify-content-center">
+            <Button
+              label="Create Folder"
+              icon="pi pi-folder-plus"
+              className="p-button-success"
+              onClick={() => onCreateFolder && onCreateFolder(null, 'folder')}
+            />
+            <Button
+              label="Create File"
+              icon="pi pi-file-plus"
+              className="p-button-info"
+              onClick={() => onCreateFile && onCreateFile(null, 'file')}
+            />
+          </div>
         </div>
       </div>
     );

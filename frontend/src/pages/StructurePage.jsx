@@ -29,6 +29,7 @@ const StructurePage = () => {
   const [editingNode, setEditingNode] = useState(null);
   const [parentForNewNode, setParentForNewNode] = useState(null);
   const [selectedNode, setSelectedNode] = useState(null);
+  const [expandedNodes, setExpandedNodes] = useState(new Set());
 
   const [formData, setFormData] = useState({
     name: "",
@@ -72,6 +73,10 @@ const StructurePage = () => {
     dispatch(createStructureNode(nodeData)).then((result) => {
       if (result.type === "structure/createNode/fulfilled") {
         toast.success(`${formData.type === 'folder' ? 'Folder' : 'File'} created successfully!`);
+        // Keep parent folder expanded after creating child
+        if (formData.parent_id) {
+          setExpandedNodes(prev => new Set([...prev, formData.parent_id]));
+        }
         dispatch(fetchStructure());
         setShowCreateDialog(false);
         resetForm();
@@ -94,17 +99,13 @@ const StructurePage = () => {
         toast.success(`${editingNode.type === 'folder' ? 'Folder' : 'File'} updated successfully!`);
         dispatch(fetchStructure());
         setShowEditDialog(false);
-        resetForm();
+        resetForm();        
       }
     });
   };
 
   const handleDeleteNode = (node) => {
-    if (!node) {
-      toast.error("Please select a node to delete");
-      return;
-    }
-    confirmDialog({      
+    confirmDialog({            
       message: `Are you sure you want to delete "${node.name}"?`,
       header: 'Delete Confirmation',
       icon: 'pi pi-exclamation-triangle',
@@ -124,7 +125,7 @@ const StructurePage = () => {
   const openCreateDialog = (parentNode = null, type = 'folder') => {
     setParentForNewNode(parentNode);
     setFormData({
-      name: "",
+      name:"",
       type: type,
       parent_id: parentNode ? parentNode.id : null,
     });
@@ -132,10 +133,6 @@ const StructurePage = () => {
   };
 
   const openEditDialog = (node) => {
-    if (!node) {
-      toast.error("Please select a node to edit");
-      return;
-    }
     setEditingNode(node);
     setFormData({
       name: node.name,
@@ -154,39 +151,76 @@ const StructurePage = () => {
   };
 
   return (
-    <div className="p-4">
+    <div className="p-3">
       <ConfirmDialog />
       
-      <Card title="📁 File Structure Manager" className="mb-4">
-        <div className="flex justify-content-between align-items-center mb-3 p-3 surface-100 border-round">
-          <div className="flex align-items-center gap-2">
-            {selectedNode ? (
-              <>
-                <CustomIcon type={selectedNode.type} size={20} />
-                <span className="font-semibold">{selectedNode.name}</span>
-              </>
-            ) : (
-              <div></div>
-            )}
+      {/* Header Section */}
+      <div className="mb-3">
+        <div className="flex justify-content-between align-items-center mb-2">
+          <div>
+            <h1 className="text-2xl font-bold text-900 m-0 mb-1">📁 File Structure Manager</h1>
+            <p className="text-500 text-sm m-0">Organize your files and folders efficiently</p>
           </div>
-          
           <div className="flex gap-2">
             <Button
-              label="Add Folder"
+              label="New Folder"
               icon="pi pi-folder-plus"
               onClick={() => openCreateDialog(selectedNode, 'folder')}
               className="p-button-success"
-              size="small"
+              style={{ borderRadius: '8px' }}
             />
-           
           </div>
         </div>
 
+        {/* Selected Node Info Bar */}
+        {selectedNode && (
+          <div className="surface-100 border-round p-2 border-1 surface-border">
+            <div className="flex align-items-center justify-content-between">
+              <div className="flex align-items-center gap-2">
+                <div className="bg-primary-100 border-circle" style={{ padding: '0.4rem' }}>
+                  <CustomIcon type={selectedNode.type} size={16} />
+                </div>
+                <div>
+                  <div className="text-500" style={{ fontSize: '0.65rem', marginBottom: '0.15rem' }}>Selected</div>
+                  <div className="font-bold text-900 text-sm">{selectedNode.name}</div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  icon="pi pi-pencil"
+                  label="Edit"
+                  className="p-button-warning p-button-outlined p-button-sm"
+                  onClick={() => openEditDialog(selectedNode)}
+                  style={{ borderRadius: '4px', fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                />
+                <Button
+                  icon="pi pi-trash"
+                  label="Delete"
+                  className="p-button-danger p-button-outlined p-button-sm"
+                  onClick={() => handleDeleteNode(selectedNode)}
+                  style={{ borderRadius: '4px', fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Main Content Card */}
+      <Card className="shadow-2 border-round-lg" style={{ border: 'none' }}>
         {error ? (
-          <div className="text-center py-8">
-            <i className="pi pi-exclamation-triangle text-6xl text-red-400 mb-4"></i>
-            <div className="text-900 font-medium text-xl mb-2">Error Loading Structure</div>
-            <div className="text-600 mb-4">{error}</div>
+          <div className="text-center py-6">
+            <div className="inline-flex align-items-center justify-content-center bg-red-100 border-circle mb-3" style={{ width: '60px', height: '60px' }}>
+              <i className="pi pi-exclamation-triangle text-4xl text-red-500"></i>
+            </div>
+            <div className="text-900 font-bold text-xl mb-2">Error Loading Structure</div>
+            <div className="text-600 mb-3">{error}</div>
+            <Button
+              label="Retry"
+              icon="pi pi-refresh"
+              onClick={() => dispatch(fetchStructure())}
+              style={{ borderRadius: '8px' }}
+            />
           </div>
         ) : (
           <CustomTreeTable
@@ -200,6 +234,8 @@ const StructurePage = () => {
             onCreateFile={(node) => openCreateDialog(node, 'file')}
             onEditNode={openEditDialog}
             onDeleteNode={handleDeleteNode}
+            expandedNodes={expandedNodes}
+            onExpandedNodesChange={setExpandedNodes}
           />
         )}
       </Card>
@@ -211,60 +247,77 @@ const StructurePage = () => {
           setShowCreateDialog(false);
           resetForm();
         }}
-        header={`Create New ${formData.type === 'folder' ? 'Folder' : 'File'}`}
+        header={
+          <div className="flex align-items-center gap-3">
+            <div className="bg-primary-100 border-circle p-2">
+              <i className={`pi ${formData.type === 'folder' ? 'pi-folder-plus' : 'pi-file-plus'} text-primary text-xl`}></i>
+            </div>
+            <span className="text-2xl font-bold">Create New {formData.type === 'folder' ? 'Folder' : 'File'}</span>
+          </div>
+        }
         modal
-        style={{ width: "400px" }}
+        style={{ width: "500px" }}
         className="p-fluid"
       >
-        <div className="flex flex-column gap-4">
-          <div className="field">
-            <label>Name *</label>
-            <InputText
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder={`Enter ${formData.type} name`}
-              autoFocus
-            />
-          </div>
-
-          <div className="field">
-            <label>Type</label>
-            <Dropdown
-              value={formData.type}
-              options={[
-                { label: "Folder", value: "folder" },
-                { label: "File", value: "file" },
-              ]}
-              onChange={(e) => setFormData({ ...formData, type: e.value })}
-            />
-          </div>
-
-          {parentForNewNode && (
+        <form onSubmit={(e) => { e.preventDefault(); handleCreateNode(); }}>
+          <div className="flex flex-column gap-4 pt-3">
             <div className="field">
-              <label>Parent</label>
-              <div className="flex align-items-center gap-2 p-2 surface-100 border-round">
-                <CustomIcon type={parentForNewNode.type} size={16} />
-                <span>{parentForNewNode.name}</span>
-              </div>
+              <label className="font-semibold text-900 mb-2 block">Name *</label>
+              <InputText
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder={`Enter ${formData.type} name`}
+                autoFocus
+                className="p-inputtext-lg"
+                style={{ borderRadius: '8px' }}
+              />
             </div>
-          )}
 
-          <div className="flex justify-content-end gap-2">
-            <Button
-              label="Cancel"
-              className="p-button-text"
-              onClick={() => {
-                setShowCreateDialog(false);
-                resetForm();
-              }}
-            />
-            <Button
-              label="Create"
-              icon="pi pi-check"
-              onClick={handleCreateNode}
-            />
+            <div className="field">
+              <label className="font-semibold text-900 mb-2 block">Type</label>
+              <Dropdown
+                value={formData.type}
+                options={[
+                  { label: "📁 Folder", value: "folder" },
+                  { label: "📄 File", value: "file" },
+                ]}
+                onChange={(e) => setFormData({ ...formData, type: e.value })}
+                className="p-inputtext-lg"
+                style={{ borderRadius: '8px' }}
+              />
+            </div>
+
+            {parentForNewNode && (
+              <div className="field">
+                <label className="font-semibold text-900 mb-2 block">Parent Folder</label>
+                <div className="flex align-items-center gap-3 p-3 surface-100 border-round-lg border-1 surface-border">
+                  <CustomIcon type={parentForNewNode.type} size={20} />
+                  <span className="font-medium text-900">{parentForNewNode.name}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-content-end gap-2 pt-3">
+              <Button
+                label="Cancel"
+                type="button"
+                className="p-button-text p-button-lg"
+                onClick={() => {
+                  setShowCreateDialog(false);
+                  resetForm();
+                }}
+                style={{ borderRadius: '8px' }}
+              />
+              <Button
+                label="Create"
+                type="submit"
+                icon="pi pi-check"
+                className="p-button-lg"
+                style={{ borderRadius: '8px' }}
+              />
+            </div>
           </div>
-        </div>
+        </form>
       </Dialog>
 
       {/* Edit Dialog */}
@@ -274,38 +327,53 @@ const StructurePage = () => {
           setShowEditDialog(false);
           resetForm();
         }}
-        header={`Edit ${editingNode?.type === 'folder' ? 'Folder' : 'File'}`}
+        header={
+          <div className="flex align-items-center gap-3">
+            <div className="bg-orange-100 border-circle p-2">
+              <i className="pi pi-pencil text-orange-500 text-xl"></i>
+            </div>
+            <span className="text-2xl font-bold">Edit {editingNode?.type === 'folder' ? 'Folder' : 'File'}</span>
+          </div>
+        }
         modal
-        style={{ width: "400px" }}
+        style={{ width: "500px" }}
         className="p-fluid"
       >
-        <div className="flex flex-column gap-4">
-          <div className="field">
-            <label>Name *</label>
-            <InputText
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="Enter name"
-              autoFocus
-            />
-          </div>
+        <form onSubmit={(e) => { e.preventDefault(); handleUpdateNode(); }}>
+          <div className="flex flex-column gap-4 pt-3">
+            <div className="field">
+              <label className="font-semibold text-900 mb-2 block">Name *</label>
+              <InputText
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Enter name"
+                autoFocus
+                className="p-inputtext-lg"
+                style={{ borderRadius: '8px' }}
+              />
+            </div>
 
-          <div className="flex justify-content-end gap-2">
-            <Button
-              label="Cancel"
-              className="p-button-text"
-              onClick={() => {
-                setShowEditDialog(false);
-                resetForm();
-              }}
-            />
-            <Button
-              label="Update"
-              icon="pi pi-check"
-              onClick={handleUpdateNode}
-            />
+            <div className="flex justify-content-end gap-2 pt-3">
+              <Button
+                label="Cancel"
+                type="button"
+                className="p-button-text p-button-lg"
+                onClick={() => {
+                  setShowEditDialog(false);
+                  resetForm();
+                }}
+                style={{ borderRadius: '8px' }}
+              />
+              <Button
+                label="Update"
+                type="submit"
+                icon="pi pi-check"
+                className="p-button-warning p-button-lg"
+                style={{ borderRadius: '8px' }}
+              />
+            </div>
           </div>
-        </div>
+        </form>
       </Dialog>
     </div>
   );
