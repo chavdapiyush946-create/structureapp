@@ -9,9 +9,9 @@ const CustomTreeTable = ({
   onCreateFile, 
   onEditNode, 
   onDeleteNode,
-  onFetchChildren, // New prop for lazy loading
+  onFetchChildren, 
   loadingChildren = {}, // Track which folders are loading
-  loading = false 
+  loading = false,
 }) => {
   const [expandedNodes, setExpandedNodes] = useState(new Set());
 
@@ -44,7 +44,7 @@ const CustomTreeTable = ({
     return (
       <div key={node.id}>
         {/* Main Row */}
-        <div className="custom-tree-row border-bottom-1 surface-border p-2 hover:surface-100">
+        <div className="custom-tree-row p-2 hover:surface-100">
           <div className="grid align-items-center">
             {/* Name Column */}
             <div className="col-6">
@@ -156,7 +156,7 @@ const CustomTreeTable = ({
   return (
     <div className="custom-tree-table">
       {/* Header */}
-      <div className="custom-tree-header surface-100 border-bottom-2 surface-border p-3">
+      <div className="custom-tree-header surface-100 border-bottom-1 surface-border p-3">
         <div className="grid font-semibold text-900">
           <div className="col-6">Name</div>
           <div className="col-2">Type</div>

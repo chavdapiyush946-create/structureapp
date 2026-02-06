@@ -1,7 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import api from "../../services/api";
 
-// Async thunks for API calls
 export const fetchStructure = createAsyncThunk(
   "structure/fetchStructure",
   async (_, { rejectWithValue }) => {
@@ -71,7 +70,7 @@ const structureSlice = createSlice({
     error: null,
     selectedNode: null,
     expandedNodes: [],
-    loadingChildren: {}, // Track which folders are loading children
+    loadingChildren: {}, 
   },
   reducers: {
     setSelectedNode: (state, action) => {

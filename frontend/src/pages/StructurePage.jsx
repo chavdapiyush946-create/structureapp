@@ -9,13 +9,12 @@ import {
   clearError,
 } from "../features/structure/structureSlice";
 
-import { Card } from "primereact/card";
 import { Button } from "primereact/button";
 import { InputText } from "primereact/inputtext";
 import { Dropdown } from "primereact/dropdown";
-import { Toolbar } from "primereact/toolbar";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { Dialog } from "primereact/dialog";
+import { Card } from "primereact/card";
 import { toast } from "react-toastify";
 
 import CustomIcon from "../components/CustomIcon";
@@ -29,6 +28,7 @@ const StructurePage = () => {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingNode, setEditingNode] = useState(null);
   const [parentForNewNode, setParentForNewNode] = useState(null);
+  const [selectedNode, setSelectedNode] = useState(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -100,6 +100,10 @@ const StructurePage = () => {
   };
 
   const handleDeleteNode = (node) => {
+    if (!node) {
+      toast.error("Please select a node to delete");
+      return;
+    }
     confirmDialog({      
       message: `Are you sure you want to delete "${node.name}"?`,
       header: 'Delete Confirmation',
@@ -110,6 +114,7 @@ const StructurePage = () => {
           if (result.type === "structure/deleteNode/fulfilled") {
             toast.success(`${node.type === 'folder' ? 'Folder' : 'File'} deleted successfully!`);
             dispatch(fetchStructure());
+            setSelectedNode(null);
           }
         });
       }
@@ -127,6 +132,10 @@ const StructurePage = () => {
   };
 
   const openEditDialog = (node) => {
+    if (!node) {
+      toast.error("Please select a node to edit");
+      return;
+    }
     setEditingNode(node);
     setFormData({
       name: node.name,
@@ -140,25 +149,39 @@ const StructurePage = () => {
     await dispatch(fetchFolderChildren(folderId));
   };
 
-  const toolbarStartContent = (
-    <div className="flex gap-2">
-      <Button
-        label="New Folder"
-        icon="pi pi-folder-plus"
-        className="p-button-success"
-        onClick={() => openCreateDialog(null, 'folder')}
-      />
-     
-    </div>
-  );
+  const handleNodeSelect = (node) => {
+    setSelectedNode(node);
+  };
 
   return (
     <div className="p-4">
       <ConfirmDialog />
       
       <Card title="📁 File Structure Manager" className="mb-4">
-        <Toolbar start={toolbarStartContent} className="mb-4" />
-        
+        <div className="flex justify-content-between align-items-center mb-3 p-3 surface-100 border-round">
+          <div className="flex align-items-center gap-2">
+            {selectedNode ? (
+              <>
+                <CustomIcon type={selectedNode.type} size={20} />
+                <span className="font-semibold">{selectedNode.name}</span>
+              </>
+            ) : (
+              <div></div>
+            )}
+          </div>
+          
+          <div className="flex gap-2">
+            <Button
+              label="Add Folder"
+              icon="pi pi-folder-plus"
+              onClick={() => openCreateDialog(selectedNode, 'folder')}
+              className="p-button-success"
+              size="small"
+            />
+           
+          </div>
+        </div>
+
         {error ? (
           <div className="text-center py-8">
             <i className="pi pi-exclamation-triangle text-6xl text-red-400 mb-4"></i>
@@ -171,6 +194,8 @@ const StructurePage = () => {
             loading={loading}
             loadingChildren={loadingChildren}
             onFetchChildren={handleFetchChildren}
+            onNodeSelect={handleNodeSelect}
+            selectedNodeId={selectedNode?.id}
             onCreateFolder={(node) => openCreateDialog(node, 'folder')}
             onCreateFile={(node) => openCreateDialog(node, 'file')}
             onEditNode={openEditDialog}
