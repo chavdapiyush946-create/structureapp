@@ -1,43 +1,40 @@
-import { use, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   fetchStructure,
+  fetchFolderChildren,
   createStructureNode,
   updateStructureNode,
   deleteStructureNode,
-  setSelectedNode,
   clearError,
 } from "../features/structure/structureSlice";
 
 import { Card } from "primereact/card";
 import { Button } from "primereact/button";
-import { Dialog } from "primereact/dialog";
 import { InputText } from "primereact/inputtext";
 import { Dropdown } from "primereact/dropdown";
-import { Tree } from "primereact/tree";
 import { Toolbar } from "primereact/toolbar";
-import { Splitter, SplitterPanel } from "primereact/splitter";
-import { Panel } from "primereact/panel";
-import { Badge } from "primereact/badge";
-import { ConfirmDialog } from "primereact/confirmdialog";
+import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
+import { Dialog } from "primereact/dialog";
 import { toast } from "react-toastify";
 
-import StructureTree from "../components/StructureTree";
-import NodeDetails from "../components/NodeDetails";
-import CreateNodeDialog from "../components/CreateNodeDialog";
-import EditNodeDialog from "../components/EditNodeDialog";
 import CustomIcon from "../components/CustomIcon";
-
+import CustomTreeTable from "../components/CustomTreeTable";
 
 const StructurePage = () => {
   const dispatch = useDispatch();
-  const { tree, loading, error, selectedNode } = useSelector((state) => state.structure);
+  const { tree, loading, error, loadingChildren } = useSelector((state) => state.structure);
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editingNode, setEditingNode] = useState(null);
   const [parentForNewNode, setParentForNewNode] = useState(null);
-  const [nodeToEdit, setNodeToEdit] = useState(null);
 
+  const [formData, setFormData] = useState({
+    name: "",
+    type: "folder",
+    parent_id: null,
+  });
 
   useEffect(() => {
     dispatch(fetchStructure());
@@ -50,101 +47,108 @@ const StructurePage = () => {
     }
   }, [error, dispatch]);
 
-  const handleCreateNode = (nodeData) => {
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      type: "folder",
+      parent_id: null,
+    });
+    setEditingNode(null);
+    setParentForNewNode(null);
+  };
+
+  const handleCreateNode = () => {
+    if (!formData.name.trim()) {
+      toast.error("Name is required");
+      return;
+    }
+
+    const nodeData = {
+      name: formData.name.trim(),
+      type: formData.type,
+      parent_id: formData.parent_id,
+    };
+
     dispatch(createStructureNode(nodeData)).then((result) => {
       if (result.type === "structure/createNode/fulfilled") {
-        toast.success(`${nodeData.type === 'folder' ? 'Folder' : 'File'} created successfully!`);
-        dispatch(fetchStructure()); // Refresh tree
+        toast.success(`${formData.type === 'folder' ? 'Folder' : 'File'} created successfully!`);
+        dispatch(fetchStructure());
         setShowCreateDialog(false);
-        setParentForNewNode(null);
+        resetForm();
       }
     });
   };
 
-  const handleCreateFolder = (parentNode = null) => {
-    setParentForNewNode(parentNode);
-    setShowCreateDialog(true);
-  };
-
-  const handleCreateFile = (parentNode) => {
-    if (!parentNode || parentNode.type !== 'folder') {
-      toast.error("Files must be created inside a folder");
+  const handleUpdateNode = () => {
+    if (!formData.name.trim() || !editingNode) {
+      toast.error("Name is required");
       return;
     }
-    setParentForNewNode(parentNode);
-    setShowCreateDialog(true);
-  };
 
-  const handleEditNode = (node) => {
-    setNodeToEdit(node);
-    setShowEditDialog(true);
-  };
+    const updates = {
+      name: formData.name.trim(),
+    };
 
-  const handleUpdateNode = (updates) => {
-    if (!nodeToEdit) return;
-    
-    dispatch(updateStructureNode({ nodeId: nodeToEdit.id, updates })).then((result) => {
+    dispatch(updateStructureNode({ nodeId: editingNode.id, updates })).then((result) => {
       if (result.type === "structure/updateNode/fulfilled") {
-        toast.success(`${nodeToEdit.type === 'folder' ? 'Folder' : 'File'} updated successfully!`);
-        dispatch(fetchStructure()); // Refresh tree
+        toast.success(`${editingNode.type === 'folder' ? 'Folder' : 'File'} updated successfully!`);
+        dispatch(fetchStructure());
         setShowEditDialog(false);
-        setNodeToEdit(null);
-        // Update selected node if it was the one being edited
-        if (selectedNode && selectedNode.id === nodeToEdit.id) {
-          dispatch(setSelectedNode({ ...nodeToEdit, ...updates }));
-        }
+        resetForm();
       }
     });
   };
 
   const handleDeleteNode = (node) => {
-    if (!node) return;
-    
-    // Show confirmation dialog
-    import('primereact/confirmdialog').then(({ confirmDialog }) => {
-      confirmDialog({
-        message: `Are you sure you want to delete "${node.name}"?`,
-        header: 'Delete Confirmation',
-        icon: 'pi pi-exclamation-triangle',
-        acceptClassName: 'p-button-danger',
-        accept: () => {
-          dispatch(deleteStructureNode(node.id)).then((result) => {
-            if (result.type === "structure/deleteNode/fulfilled") {
-              toast.success(`${node.type === 'folder' ? 'Folder' : 'File'} deleted successfully!`);
-              dispatch(fetchStructure()); // Refresh tree
-              // Clear selection if deleted node was selected
-              if (selectedNode && selectedNode.id === node.id) {
-                dispatch(setSelectedNode(null));
-              }
-            }
-          });
-        }
-      });
+    confirmDialog({      
+      message: `Are you sure you want to delete "${node.name}"?`,
+      header: 'Delete Confirmation',
+      icon: 'pi pi-exclamation-triangle',
+      acceptClassName: 'p-button-danger',
+      accept: () => {
+        dispatch(deleteStructureNode(node.id)).then((result) => {
+          if (result.type === "structure/deleteNode/fulfilled") {
+            toast.success(`${node.type === 'folder' ? 'Folder' : 'File'} deleted successfully!`);
+            dispatch(fetchStructure());
+          }
+        });
+      }
     });
+  };
+
+  const openCreateDialog = (parentNode = null, type = 'folder') => {
+    setParentForNewNode(parentNode);
+    setFormData({
+      name: "",
+      type: type,
+      parent_id: parentNode ? parentNode.id : null,
+    });
+    setShowCreateDialog(true);
+  };
+
+  const openEditDialog = (node) => {
+    setEditingNode(node);
+    setFormData({
+      name: node.name,
+      type: node.type,
+      parent_id: node.parent_id,
+    });
+    setShowEditDialog(true);
+  };
+
+  const handleFetchChildren = async (folderId) => {
+    await dispatch(fetchFolderChildren(folderId));
   };
 
   const toolbarStartContent = (
     <div className="flex gap-2">
       <Button
         label="New Folder"
-        
+        icon="pi pi-folder-plus"
         className="p-button-success"
-        onClick={() => handleCreateFolder()}
+        onClick={() => openCreateDialog(null, 'folder')}
       />
-      
-    </div>
-  );
-
-  const toolbarEndContent = (
-    <div className="flex gap-2">
-      <Button
-        icon="pi pi-refresh"
-        className="p-button-outlined"
-        onClick={() => dispatch(fetchStructure())}
-        loading={loading}
-        tooltip="Refresh"
-      />
-      <Badge value={tree.length} severity="info" />
+     
     </div>
   );
 
@@ -153,89 +157,131 @@ const StructurePage = () => {
       <ConfirmDialog />
       
       <Card title="📁 File Structure Manager" className="mb-4">
-        <Toolbar start={toolbarStartContent} end={toolbarEndContent} className="mb-4" />
+        <Toolbar start={toolbarStartContent} className="mb-4" />
         
-        <Splitter style={{ height: "600px" }}>
-          <SplitterPanel size={60} minSize={30}>
-            <Panel header="Structure Tree" className="h-full">
-              {loading && tree.length === 0 ? (
-                <div className="flex justify-content-center align-items-center h-full">
-                  <div className="text-center">
-                    <i className="pi pi-spin pi-spinner text-4xl text-primary mb-3"></i>
-                    <div>Loading structure...</div>
-                  </div>
-                </div>
-              ) : error ? (
-                <div className="text-center py-8">
-                  <i className="pi pi-exclamation-triangle text-6xl text-red-400 mb-4"></i>
-                  <div className="text-900 font-medium text-xl mb-2">Error Loading Structure</div>
-                  <div className="text-600 mb-4">{error}</div>
-                  <Button
-                    label="Retry"
-                    icon="pi pi-refresh"
-                    className="p-button-outlined"
-                    onClick={() => dispatch(fetchStructure())}
-                  />
-                </div>
-              ) : tree.length === 0 ? (
-                <div className="text-center py-8">
-                  <i className="pi pi-folder-open text-6xl text-400 mb-4"></i>
-                  <div className="text-900 font-medium text-xl mb-2">No structure yet</div>
-                  <div className="text-600 mb-4">Create your first folder to get started!</div>
-                  <Button
-                    label="Create Folder"
-                    icon="pi pi-folder"
-                    className="p-button-success"
-                    onClick={() => handleCreateFolder()}
-                  />
-                </div>
-              ) : (
-                <StructureTree
-                  nodes={tree}
-                  onNodeSelect={(node) => dispatch(setSelectedNode(node))}
-                  onCreateFolder={handleCreateFolder}
-                  onCreateFile={handleCreateFile}
-                  onEditNode={handleEditNode}
-                  onDeleteNode={handleDeleteNode}
-                  selectedNode={selectedNode}
-                />
-              )}
-            </Panel>
-          </SplitterPanel>
-          
-          <SplitterPanel size={40} minSize={20}>
-            <Panel header="Node Details" className="h-full">
-              <NodeDetails
-                node={selectedNode}
-                onCreateFolder={handleCreateFolder}
-                onCreateFile={handleCreateFile}
-                onEditNode={handleEditNode}
-                onDeleteNode={handleDeleteNode}
-              />
-            </Panel>
-          </SplitterPanel>
-        </Splitter>
+        {error ? (
+          <div className="text-center py-8">
+            <i className="pi pi-exclamation-triangle text-6xl text-red-400 mb-4"></i>
+            <div className="text-900 font-medium text-xl mb-2">Error Loading Structure</div>
+            <div className="text-600 mb-4">{error}</div>
+          </div>
+        ) : (
+          <CustomTreeTable
+            data={tree}            
+            loading={loading}
+            loadingChildren={loadingChildren}
+            onFetchChildren={handleFetchChildren}
+            onCreateFolder={(node) => openCreateDialog(node, 'folder')}
+            onCreateFile={(node) => openCreateDialog(node, 'file')}
+            onEditNode={openEditDialog}
+            onDeleteNode={handleDeleteNode}
+          />
+        )}
       </Card>
 
-      <CreateNodeDialog
+      {/* Create Dialog */}
+      <Dialog
         visible={showCreateDialog}
         onHide={() => {
           setShowCreateDialog(false);
-          setParentForNewNode(null);
+          resetForm();
         }}
-        onSubmit={handleCreateNode}
-        parentNode={parentForNewNode}
-      />
+        header={`Create New ${formData.type === 'folder' ? 'Folder' : 'File'}`}
+        modal
+        style={{ width: "400px" }}
+        className="p-fluid"
+      >
+        <div className="flex flex-column gap-4">
+          <div className="field">
+            <label>Name *</label>
+            <InputText
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder={`Enter ${formData.type} name`}
+              autoFocus
+            />
+          </div>
 
-      <EditNodeDialog
+          <div className="field">
+            <label>Type</label>
+            <Dropdown
+              value={formData.type}
+              options={[
+                { label: "Folder", value: "folder" },
+                { label: "File", value: "file" },
+              ]}
+              onChange={(e) => setFormData({ ...formData, type: e.value })}
+            />
+          </div>
+
+          {parentForNewNode && (
+            <div className="field">
+              <label>Parent</label>
+              <div className="flex align-items-center gap-2 p-2 surface-100 border-round">
+                <CustomIcon type={parentForNewNode.type} size={16} />
+                <span>{parentForNewNode.name}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-content-end gap-2">
+            <Button
+              label="Cancel"
+              className="p-button-text"
+              onClick={() => {
+                setShowCreateDialog(false);
+                resetForm();
+              }}
+            />
+            <Button
+              label="Create"
+              icon="pi pi-check"
+              onClick={handleCreateNode}
+            />
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog
         visible={showEditDialog}
         onHide={() => {
           setShowEditDialog(false);
-          setNodeToEdit(null);
+          resetForm();
         }}
-        onSubmit={handleUpdateNode}
-        node={nodeToEdit}
-      />
+        header={`Edit ${editingNode?.type === 'folder' ? 'Folder' : 'File'}`}
+        modal
+        style={{ width: "400px" }}
+        className="p-fluid"
+      >
+        <div className="flex flex-column gap-4">
+          <div className="field">
+            <label>Name *</label>
+            <InputText
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="Enter name"
+              autoFocus
+            />
+          </div>
+
+          <div className="flex justify-content-end gap-2">
+            <Button
+              label="Cancel"
+              className="p-button-text"
+              onClick={() => {
+                setShowEditDialog(false);
+                resetForm();
+              }}
+            />
+            <Button
+              label="Update"
+              icon="pi pi-check"
+              onClick={handleUpdateNode}
+            />
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 };

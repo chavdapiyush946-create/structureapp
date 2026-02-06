@@ -39,4 +39,14 @@ export const deleteStructure = async (req, res) => {
   }
 };
 
+export const getStructureChildren = async (req, res) => {
+  try {
+    const folderId = req.params.id;
+    const children = await service.getNodeChildren(folderId);
+    res.json(children);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 

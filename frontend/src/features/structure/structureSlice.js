@@ -50,6 +50,19 @@ export const deleteStructureNode = createAsyncThunk(
   }
 );
 
+// Fetch children of a specific folder
+export const fetchFolderChildren = createAsyncThunk(
+  "structure/fetchChildren",
+  async (folderId, { rejectWithValue }) => {
+    try {
+      const response = await api.get(`/structure/${folderId}/children`);
+      return { folderId, children: response.data };
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.error || "Failed to fetch children");
+    }
+  }
+);
+
 const structureSlice = createSlice({
   name: "structure",
   initialState: {
@@ -58,6 +71,7 @@ const structureSlice = createSlice({
     error: null,
     selectedNode: null,
     expandedNodes: [],
+    loadingChildren: {}, // Track which folders are loading children
   },
   reducers: {
     setSelectedNode: (state, action) => {
@@ -127,6 +141,36 @@ const structureSlice = createSlice({
       })
       .addCase(deleteStructureNode.rejected, (state, action) => {
         state.loading = false;
+        state.error = action.payload;
+      })
+      // Fetch folder children
+      .addCase(fetchFolderChildren.pending, (state, action) => {
+        const folderId = action.meta.arg;
+        state.loadingChildren[folderId] = true;
+        state.error = null;
+      })
+      .addCase(fetchFolderChildren.fulfilled, (state, action) => {
+        const { folderId, children } = action.payload;
+        state.loadingChildren[folderId] = false;
+        
+        // Update the tree with children
+        const updateNodeChildren = (nodes) => {
+          return nodes.map(node => {
+            if (node.id === folderId) {
+              return { ...node, children, childrenLoaded: true };
+            }
+            if (node.children) {
+              return { ...node, children: updateNodeChildren(node.children) };
+            }
+            return node;
+          });
+        };
+        
+        state.tree = updateNodeChildren(state.tree);
+      })
+      .addCase(fetchFolderChildren.rejected, (state, action) => {
+        const folderId = action.meta.arg;
+        state.loadingChildren[folderId] = false;
         state.error = action.payload;
       });
   },

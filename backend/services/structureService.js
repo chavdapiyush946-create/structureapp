@@ -199,6 +199,7 @@ const performDelete = (nodeId, resolve, reject) => {
   db.query(
     "DELETE FROM structure WHERE id = ?",
     [nodeId],
+    
     (err, result) => {
       if (err) {
         console.error(err);
@@ -215,3 +216,20 @@ const performDelete = (nodeId, resolve, reject) => {
 };
 
 
+
+// Get children of a specific folder
+export const getNodeChildren = (folderId) => {
+  return new Promise((resolve, reject) => {
+    db.query(
+      "SELECT * FROM structure WHERE parent_id = ? ORDER BY type DESC, name ASC",
+      [folderId],
+      (err, rows) => {
+        if (err) {
+          console.error('Database error:', err);
+          return reject(new Error("Failed to fetch children"));
+        }
+        resolve(rows);
+      }
+    );
+  });
+};
