@@ -62,6 +62,30 @@ export const fetchFolderChildren = createAsyncThunk(
   }
 );
 
+// Upload file
+export const uploadFile = createAsyncThunk(
+  "structure/uploadFile",
+  async ({ file, parent_id }, { rejectWithValue }) => {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      if (parent_id) {
+        formData.append("parent_id", parent_id);
+        
+      }
+
+      const response = await api.post("/upload", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.error || "Failed to upload file");
+    }
+  }
+);
+
 const structureSlice = createSlice({
   name: "structure",
   initialState: {
@@ -70,7 +94,8 @@ const structureSlice = createSlice({
     error: null,
     selectedNode: null,
     expandedNodes: [],
-    loadingChildren: {}, 
+    loadingChildren: {},
+    uploading: false, 
   },
   reducers: {
     setSelectedNode: (state, action) => {
@@ -161,6 +186,18 @@ const structureSlice = createSlice({
       .addCase(fetchFolderChildren.rejected, (state, action) => {
         const folderId = action.meta.arg;
         state.loadingChildren[folderId] = false;
+        state.error = action.payload;
+      })
+      // Upload file
+      .addCase(uploadFile.pending, (state) => {
+        state.uploading = true;
+        state.error = null;
+      })
+      .addCase(uploadFile.fulfilled, (state) => {
+        state.uploading = false;
+      })
+      .addCase(uploadFile.rejected, (state, action) => {
+        state.uploading = false;
         state.error = action.payload;
       });
   },

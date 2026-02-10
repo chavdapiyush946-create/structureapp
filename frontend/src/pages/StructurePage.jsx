@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   fetchStructure,
@@ -7,6 +7,7 @@ import {
   updateStructureNode,
   deleteStructureNode,
   clearError,
+  uploadFile,
 } from "../features/structure/structureSlice";
 
 import { Button } from "primereact/button";
@@ -16,20 +17,21 @@ import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { Dialog } from "primereact/dialog";
 import { Card } from "primereact/card";
 import { toast } from "react-toastify";
-
 import CustomIcon from "../components/CustomIcon";
 import CustomTreeTable from "../components/CustomTreeTable";
 
 const StructurePage = () => {
   const dispatch = useDispatch();
-  const { tree, loading, error, loadingChildren } = useSelector((state) => state.structure);
-
+  const { tree, loading, error, loadingChildren, uploading } = useSelector((state) => state.structure);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [editingNode, setEditingNode] = useState(null);
   const [parentForNewNode, setParentForNewNode] = useState(null);
   const [selectedNode, setSelectedNode] = useState(null);
   const [expandedNodes, setExpandedNodes] = useState(new Set());
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const fileInputRef = useRef(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -55,10 +57,10 @@ const StructurePage = () => {
       parent_id: null,
     });
     setEditingNode(null);
-    setParentForNewNode(null);
+    setParentForNewNode(null);    
   };
 
-  const handleCreateNode = () => {
+  const handleCreateNode = async () => {
     if (!formData.name.trim()) {
       toast.error("Name is required");
       return;
@@ -70,21 +72,24 @@ const StructurePage = () => {
       parent_id: formData.parent_id,
     };
 
-    dispatch(createStructureNode(nodeData)).then((result) => {
-      if (result.type === "structure/createNode/fulfilled") {
-        toast.success(`${formData.type === 'folder' ? 'Folder' : 'File'} created successfully!`);
-        // Keep parent folder expanded after creating child
-        if (formData.parent_id) {
-          setExpandedNodes(prev => new Set([...prev, formData.parent_id]));
-        }
-        dispatch(fetchStructure());
-        setShowCreateDialog(false);
-        resetForm();
+    try {
+      await dispatch(createStructureNode(nodeData)).unwrap();
+      toast.success(`${formData.type === 'folder' ? 'Folder' : 'File'} created successfully!`);
+      
+      // Keep parent folder expanded after creating child
+      if (formData.parent_id) {
+        setExpandedNodes(prev => new Set([...prev, formData.parent_id]));
       }
-    });
+      
+      await dispatch(fetchStructure());
+      setShowCreateDialog(false);
+      resetForm();
+    } catch (error) {
+      toast.error(error || 'Failed to create node');
+    }
   };
 
-  const handleUpdateNode = () => {
+  const handleUpdateNode = async () => {
     if (!formData.name.trim() || !editingNode) {
       toast.error("Name is required");
       return;
@@ -94,14 +99,15 @@ const StructurePage = () => {
       name: formData.name.trim(),
     };
 
-    dispatch(updateStructureNode({ nodeId: editingNode.id, updates })).then((result) => {
-      if (result.type === "structure/updateNode/fulfilled") {
-        toast.success(`${editingNode.type === 'folder' ? 'Folder' : 'File'} updated successfully!`);
-        dispatch(fetchStructure());
-        setShowEditDialog(false);
-        resetForm();        
-      }
-    });
+    try {
+      await dispatch(updateStructureNode({ nodeId: editingNode.id, updates })).unwrap();
+      toast.success(`${editingNode.type === 'folder' ? 'Folder' : 'File'} updated successfully!`);
+      await dispatch(fetchStructure());
+      setShowEditDialog(false);
+      resetForm();
+    } catch (error) {
+      toast.error(error || 'Failed to update node');
+    }
   };
 
   const handleDeleteNode = (node) => {
@@ -110,14 +116,15 @@ const StructurePage = () => {
       header: 'Delete Confirmation',
       icon: 'pi pi-exclamation-triangle',
       acceptClassName: 'p-button-danger',
-      accept: () => {
-        dispatch(deleteStructureNode(node.id)).then((result) => {
-          if (result.type === "structure/deleteNode/fulfilled") {
-            toast.success(`${node.type === 'folder' ? 'Folder' : 'File'} deleted successfully!`);
-            dispatch(fetchStructure());
-            setSelectedNode(null);
-          }
-        });
+      accept: async () => {
+        try {
+          await dispatch(deleteStructureNode(node.id)).unwrap();
+          toast.success(`${node.type === 'folder' ? 'Folder' : 'File'} deleted successfully!`);
+          await dispatch(fetchStructure());
+          setSelectedNode(null);
+        } catch (error) {
+          toast.error(error || 'Failed to delete node');
+        }
       }
     });
   };
@@ -139,8 +146,9 @@ const StructurePage = () => {
       type: node.type,
       parent_id: node.parent_id,
     });
+    
     setShowEditDialog(true);
-  };
+  }; 
 
   const handleFetchChildren = async (folderId) => {
     await dispatch(fetchFolderChildren(folderId));
@@ -148,6 +156,66 @@ const StructurePage = () => {
 
   const handleNodeSelect = (node) => {
     setSelectedNode(node);
+  };
+
+  const openUploadDialog = (parentNode = null) => {
+    setParentForNewNode(parentNode);
+    setSelectedFiles([]);
+    setShowUploadDialog(true);
+  };
+
+  const handleFileSelect = (event) => {
+    const files = Array.from(event.target.files);
+    if (files.length > 0) {
+      setSelectedFiles(files);
+    }
+  };
+
+  const handleFileUpload = async () => {
+    if (selectedFiles.length === 0) {
+      toast.error("Please select at least one file");
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      selectedFiles.forEach(file => {
+        formData.append('files', file);
+      });
+      
+      if (parentForNewNode?.id) {
+        formData.append('parent_id', parentForNewNode.id);
+      }
+
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${apiUrl}/api/upload-multiple`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Upload failed');
+      }
+
+      if (result.failed > 0) {
+        toast.warning(`${result.success} file(s) uploaded, ${result.failed} failed`);
+      } else {
+        toast.success(`${result.success} file(s) uploaded successfully!`);
+      }
+      
+      if (parentForNewNode?.id) {
+        setExpandedNodes(prev => new Set([...prev, parentForNewNode.id]));
+      }
+      
+      await dispatch(fetchStructure());
+      setShowUploadDialog(false);
+      setSelectedFiles([]);
+      setParentForNewNode(null);
+    } catch (error) {
+      toast.error(error.message || 'Failed to upload files');
+    }
   };
 
   return (
@@ -190,7 +258,7 @@ const StructurePage = () => {
                   icon="pi pi-pencil"
                   label="Edit"
                   className="p-button-warning p-button-outlined p-button-sm"
-                  onClick={() => openEditDialog(selectedNode)}
+                  onClick={() => openEditDialog(selectedNode)}                  
                   style={{ borderRadius: '4px', fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
                 />
                 <Button
@@ -232,6 +300,7 @@ const StructurePage = () => {
             selectedNodeId={selectedNode?.id}
             onCreateFolder={(node) => openCreateDialog(node, 'folder')}
             onCreateFile={(node) => openCreateDialog(node, 'file')}
+            onUploadFile={openUploadDialog}
             onEditNode={openEditDialog}
             onDeleteNode={handleDeleteNode}
             expandedNodes={expandedNodes}
@@ -301,12 +370,12 @@ const StructurePage = () => {
               <Button
                 label="Cancel"
                 type="button"
-                className="p-button-text p-button-lg"
+                className="p-button-text p-button-lg"                                
                 onClick={() => {
                   setShowCreateDialog(false);
                   resetForm();
                 }}
-                style={{ borderRadius: '8px' }}
+                style={{ borderRadius:'8px'}}
               />
               <Button
                 label="Create"
@@ -320,19 +389,21 @@ const StructurePage = () => {
         </form>
       </Dialog>
 
-      {/* Edit Dialog */}
-      <Dialog
-        visible={showEditDialog}
+      {/* Edit Dialog */}      
+      <Dialog        
+        visible={showEditDialog}        
         onHide={() => {
-          setShowEditDialog(false);
+          setShowEditDialog(false);      
           resetForm();
         }}
+                        
         header={
           <div className="flex align-items-center gap-3">
             <div className="bg-orange-100 border-circle p-2">
               <i className="pi pi-pencil text-orange-500 text-xl"></i>
             </div>
-            <span className="text-2xl font-bold">Edit {editingNode?.type === 'folder' ? 'Folder' : 'File'}</span>
+            <span className="text-2xl font-bold">Edit {editingNode?.type === 'folder' ? 'Folder' : 'File'}            
+            </span>
           </div>
         }
         modal
@@ -344,6 +415,7 @@ const StructurePage = () => {
             <div className="field">
               <label className="font-semibold text-900 mb-2 block">Name *</label>
               <InputText
+                
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="Enter name"
@@ -369,14 +441,125 @@ const StructurePage = () => {
                 type="submit"
                 icon="pi pi-check"
                 className="p-button-warning p-button-lg"
-                style={{ borderRadius: '8px' }}
+                style={{ borderRadius:'8px'}}
+                
               />
             </div>
           </div>
         </form>
       </Dialog>
+
+      {/* Upload File Dialog */}
+      <Dialog
+        visible={showUploadDialog}
+        onHide={() => {
+          setShowUploadDialog(false);
+          setSelectedFiles([]);
+          setParentForNewNode(null);
+        }}
+        header={
+          <div className="flex align-items-center gap-3">
+            <div className="bg-blue-100 border-circle p-2">
+              <i className="pi pi-upload text-blue-500 text-xl"></i>
+            </div>
+            <span className="text-2xl font-bold">Upload Files</span>
+          </div>
+        }
+        modal
+        style={{ width: "500px" }}
+        className="p-fluid"
+      >
+        <div className="flex flex-column gap-4 pt-3">
+          <div className="field">
+            <label className="font-semibold text-900 mb-2 block">Select Files *</label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={handleFileSelect}
+              style={{
+                padding: '0.75rem',
+                border: '1px solid #ced4da',
+                borderRadius: '8px',
+                width: '100%',
+                fontSize: '1rem'
+              }}
+            />
+            {selectedFiles.length > 0 && (
+              <div className="mt-2">
+                <div className="text-600 text-sm mb-2">
+                  {selectedFiles.length} file(s) selected
+                </div>
+                <div className="flex flex-column gap-2" style={{ maxHeight: '200px', overflow: 'auto' }}>
+                  {selectedFiles.map((file, index) => (
+                    <div key={index} className="p-2 surface-100 border-round">
+                      <div className="flex align-items-center justify-content-between gap-2">
+                        <div className="flex align-items-center gap-2 flex-1" style={{ minWidth: 0 }}>
+                          <i className="pi pi-file text-primary"></i>
+                          <span className="text-sm font-medium" style={{ 
+                            overflow: 'hidden', 
+                            textOverflow: 'ellipsis', 
+                            whiteSpace: 'nowrap' 
+                          }}>
+                            {file.name}
+                          </span>
+                        </div>
+                        <div className="flex align-items-center gap-2">
+                          <span className="text-xs text-500">
+                            {(file.size / 1024).toFixed(2)} KB
+                          </span>
+                          <Button
+                            icon="pi pi-times"
+                            className="p-button-rounded p-button-text p-button-danger p-button-sm"
+                            onClick={() => {
+                              setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+                            }}
+                            style={{ width: '1.5rem', height: '1.5rem' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {parentForNewNode && (
+            <div className="field">
+              <label className="font-semibold text-900 mb-2 block">Upload to Folder</label>
+              <div className="flex align-items-center gap-3 p-3 surface-100 border-round-lg border-1 surface-border">
+                <CustomIcon type={parentForNewNode.type} size={20} />
+                <span className="font-medium text-900">{parentForNewNode.name}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-content-end gap-2 pt-3">
+            <Button
+              label="Cancel"
+              type="button"
+              className="p-button-text p-button-lg"
+              onClick={() => {
+                setShowUploadDialog(false);
+                setSelectedFiles([]);
+                setParentForNewNode(null);
+              }}
+              style={{ borderRadius: '8px' }}
+            />
+            <Button
+              label={uploading ? "Uploading..." : `Upload ${selectedFiles.length > 0 ? `(${selectedFiles.length})` : ''}`}
+              type="button"
+              icon={uploading ? "pi pi-spin pi-spinner" : "pi pi-upload"}
+              className="p-button-lg"
+              onClick={handleFileUpload}
+              disabled={selectedFiles.length === 0 || uploading}
+              style={{ borderRadius: '8px' }}
+            />
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 };
-
 export default StructurePage;
