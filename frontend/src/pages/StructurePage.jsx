@@ -9,6 +9,13 @@ import {
   clearError,
   uploadFile,
 } from "../features/structure/structureSlice";
+import {
+  fetchUsers,
+  fetchFolderPermissions,
+  grantPermission,
+  revokePermission,
+  clearPermissionError,
+} from "../features/structure/permissionSlice";
 
 import { Button } from "primereact/button";
 import { InputText } from "primereact/inputtext";
@@ -19,6 +26,7 @@ import { Card } from "primereact/card";
 import { toast } from "react-toastify";
 import CustomIcon from "../components/CustomIcon";
 import CustomTreeTable from "../components/CustomTreeTable";
+import api from "../services/api";
 
 const StructurePage = () => {
   const dispatch = useDispatch();
@@ -33,6 +41,19 @@ const StructurePage = () => {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const fileInputRef = useRef(null);
 
+  // permission dialog state
+  const [showPermissionDialog, setShowPermissionDialog] = useState(false);
+  const [permissionForm, setPermissionForm] = useState({
+    user_id: null,
+    can_view: false,
+    can_edit: false,
+    can_delete: false,
+    can_create: false,
+  });
+
+  const { users, folderPermissions } = useSelector((state) => state.permissions);
+  const currentUserId = useSelector((state) => state.auth.id);
+
   const [formData, setFormData] = useState({
     name: "",
     type: "folder",
@@ -41,6 +62,7 @@ const StructurePage = () => {
 
   useEffect(() => {
     dispatch(fetchStructure());
+    dispatch(fetchUsers());
   }, [dispatch]);
 
   useEffect(() => {
@@ -49,6 +71,14 @@ const StructurePage = () => {
       dispatch(clearError());
     }
   }, [error, dispatch]);
+
+  const permError = useSelector((state) => state.permissions.error);
+  useEffect(() => {
+    if (permError) {
+      toast.error(permError);
+      dispatch(clearPermissionError());
+    }
+  }, [permError, dispatch]);
 
   const resetForm = () => {
     setFormData({
@@ -164,6 +194,30 @@ const StructurePage = () => {
     setShowUploadDialog(true);
   };
 
+  const openPermissionDialog = async (node) => {
+    setSelectedNode(node);
+    setShowPermissionDialog(true);
+    // load existing perms for this folder
+    dispatch(fetchFolderPermissions(node.id));
+  };
+
+  // whenever selected user changes, if there is already a permission entry for that
+  // user+folder we prefill the checkboxes
+  useEffect(() => {
+    if (selectedNode && permissionForm.user_id && folderPermissions[selectedNode.id]) {
+      const existing = folderPermissions[selectedNode.id].find(p => p.user_id === permissionForm.user_id);
+      if (existing) {
+        setPermissionForm({
+          user_id: existing.user_id,
+          can_view: !!existing.can_view,
+          can_edit: !!existing.can_edit,
+          can_delete: !!existing.can_delete,
+          can_create: !!existing.can_create,
+        });
+      }
+    }
+  }, [permissionForm.user_id, selectedNode, folderPermissions]);
+
   const handleFileSelect = (event) => {
     const files = Array.from(event.target.files);
     if (files.length > 0) {
@@ -187,17 +241,12 @@ const StructurePage = () => {
         formData.append('parent_id', parentForNewNode.id);
       }
 
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      const response = await fetch(`${apiUrl}/api/upload-multiple`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Upload failed');
-      }
+      // use axios instance which handles auth
+      const { data: result } = await api.post(
+        "/upload-multiple",
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
 
       if (result.failed > 0) {
         toast.warning(`${result.success} file(s) uploaded, ${result.failed} failed`);
@@ -214,7 +263,13 @@ const StructurePage = () => {
       setSelectedFiles([]);
       setParentForNewNode(null);
     } catch (error) {
-      toast.error(error.message || 'Failed to upload files');
+      console.error('upload error', error);
+      const msg =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to upload files';
+      toast.error(msg);
     }
   };
 
@@ -251,9 +306,21 @@ const StructurePage = () => {
                 <div>
                   <div className="text-500" style={{ fontSize: '0.65rem', marginBottom: '0.15rem' }}>Selected</div>
                   <div className="font-bold text-900 text-sm">{selectedNode.name}</div>
+                  {selectedNode.owner_id && (
+                    <div className="text-500 text-xs">Owner ID: {selectedNode.owner_id}</div>
+                  )}
                 </div>
               </div>
               <div className="flex gap-2">
+                {selectedNode.type === 'folder' && currentUserId === selectedNode.owner_id && (
+                  <Button
+                    icon="pi pi-key"
+                    label="Permissions"
+                    className="p-button-secondary p-button-outlined p-button-sm"
+                    onClick={() => openPermissionDialog(selectedNode)}
+                    style={{ borderRadius: '4px', fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                  />
+                )}
                 <Button
                   icon="pi pi-pencil"
                   label="Edit"
@@ -295,6 +362,7 @@ const StructurePage = () => {
             data={tree}            
             loading={loading}
             loadingChildren={loadingChildren}
+            currentUserId={currentUserId}
             onFetchChildren={handleFetchChildren}
             onNodeSelect={handleNodeSelect}
             selectedNodeId={selectedNode?.id}
@@ -303,6 +371,7 @@ const StructurePage = () => {
             onUploadFile={openUploadDialog}
             onEditNode={openEditDialog}
             onDeleteNode={handleDeleteNode}
+            onManagePermissions={openPermissionDialog}
             expandedNodes={expandedNodes}
             onExpandedNodesChange={setExpandedNodes}
           />
@@ -554,6 +623,126 @@ const StructurePage = () => {
               className="p-button-lg"
               onClick={handleFileUpload}
               disabled={selectedFiles.length === 0 || uploading}
+              style={{ borderRadius: '8px' }}
+            />
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Permission Dialog */}
+      <Dialog
+        visible={showPermissionDialog}
+        onHide={() => {
+          setShowPermissionDialog(false);
+          setPermissionForm({ user_id: null, can_view: false, can_edit: false, can_delete: false, can_create: false });
+        }}
+        header={
+          <div className="flex align-items-center gap-3">
+            <div className="bg-secondary-100 border-circle p-2">
+              <i className="pi pi-key text-secondary text-xl"></i>
+            </div>
+            <span className="text-2xl font-bold">Folder Permissions</span>
+          </div>
+        }
+        modal
+        style={{ width: "600px", maxWidth: '90vw' }}
+        className="p-fluid"
+      >
+        <div className="flex flex-column gap-4 pt-3">
+          <div className="field">
+            <label className="font-semibold text-900 mb-2 block">User *</label>
+            <Dropdown
+              value={permissionForm.user_id}
+              options={users
+                .filter(u => u.id !== currentUserId)
+                .map(u => ({ label: `${u.name} (${u.email})`, value: u.id }))}
+              onChange={(e) => setPermissionForm({ ...permissionForm, user_id: e.value })}
+              placeholder="Select user to share with"
+              className="p-inputtext-lg"
+              style={{ borderRadius: '8px' }}
+            />
+          </div>
+
+          <div className="field grid">
+            {['can_view','can_edit','can_delete','can_create'].map((perm) => (
+              <div key={perm} className="col-6">
+                <div className="flex align-items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id={perm}
+                    checked={permissionForm[perm]}
+                    onChange={(e) => setPermissionForm({ ...permissionForm, [perm]: e.target.checked })}
+                  />
+                  <label htmlFor={perm} className="font-medium text-900">
+                    {perm.replace('can_','').replace('_',' ').toUpperCase()}
+                  </label>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div>
+            <h4 className="text-lg font-semibold">Existing Permissions</h4>
+            {selectedNode && folderPermissions[selectedNode.id] ? (
+              <ul className="list-none p-0">
+                {folderPermissions[selectedNode.id].map(p => (
+                  <li key={p.id} className="flex justify-content-between align-items-center p-2 surface-100 border-round mb-1">
+                    <div>{p.user_name} ({p.user_email})</div>
+                    <div className="flex gap-2">
+                      <span className="text-sm">
+                        {p.can_view && 'view '}
+                        {p.can_edit && 'edit '}
+                        {p.can_delete && 'del '}
+                        {p.can_create && 'create'}
+                      </span>
+                      <Button
+                        icon="pi pi-trash"
+                        className="p-button-rounded p-button-text p-button-danger p-button-sm"
+                        onClick={async () => {
+                          await dispatch(revokePermission(p.id)).unwrap();
+                          dispatch(fetchFolderPermissions(selectedNode.id));
+                        }}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div>No permissions set yet.</div>
+            )}
+          </div>
+
+          <div className="flex justify-content-end gap-2 pt-3">
+            <Button
+              label="Cancel"
+              type="button"
+              className="p-button-text p-button-lg"
+              onClick={() => {
+                setShowPermissionDialog(false);
+                setPermissionForm({ user_id: null, can_view: false, can_edit: false, can_delete: false, can_create: false });
+              }}
+              style={{ borderRadius: '8px' }}
+            />
+            <Button
+              label="Save"
+              icon="pi pi-check"
+              className="p-button-lg"
+              onClick={async () => {
+                if (!permissionForm.user_id) {
+                  toast.error('Please select a user');
+                  return;
+                }
+                try {
+                  await dispatch(grantPermission({
+                    folder_id: selectedNode.id,
+                    ...permissionForm,
+                  })).unwrap();
+                  toast.success('Permission granted');
+                  dispatch(fetchFolderPermissions(selectedNode.id));
+                } catch (err) {
+                  toast.error(err || 'Failed to grant permission');
+                }
+              }}
               style={{ borderRadius: '8px' }}
             />
           </div>

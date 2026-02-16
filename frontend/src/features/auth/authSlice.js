@@ -2,12 +2,12 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import api from "../../services/api.js";
 
 const loadAuthFromLocalStorage = () => {
-  try {
-    
+  try {    
     return JSON.parse(localStorage.getItem("auth")) || {
       token: null,
       role: null,
       name: null,
+      id: null,
     };
   } catch {
     return { token: null, role: null, name: null };
@@ -79,6 +79,7 @@ const authSlice = createSlice({
         state.token = action.payload.token;
         state.role = action.payload.role;
         state.name = action.payload.name;
+        state.id = action.payload.id;
 
         localStorage.setItem(
           "auth",
@@ -86,6 +87,7 @@ const authSlice = createSlice({
             token: action.payload.token,
             role: action.payload.role,
             name: action.payload.name,
+            id: action.payload.id,
           })
         );
       })

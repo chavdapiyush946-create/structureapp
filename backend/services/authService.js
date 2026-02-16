@@ -120,6 +120,7 @@ export const loginUserService = async (email, password) => {
       role: user.role,
       name: user.name,
       email: user.email,
+      id: user.id, // include user id for frontend
     };
   } catch (err) {
     if (err.status) {

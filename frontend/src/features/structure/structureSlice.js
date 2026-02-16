@@ -10,8 +10,7 @@ export const fetchStructure = createAsyncThunk(
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || "Failed to fetch structure");
     }
-  }
-);
+  }); 
 
 export const createStructureNode = createAsyncThunk(
   "structure/createNode",
@@ -71,7 +70,6 @@ export const uploadFile = createAsyncThunk(
       formData.append("file", file);
       if (parent_id) {
         formData.append("parent_id", parent_id);
-        
       }
 
       const response = await api.post("/upload", formData, {
@@ -81,7 +79,13 @@ export const uploadFile = createAsyncThunk(
       });
       return response.data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.error || "Failed to upload file");
+      console.error('single upload error', error);
+      const msg =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to upload file";
+      return rejectWithValue(msg);
     }
   }
 );

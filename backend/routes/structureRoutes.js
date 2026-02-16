@@ -6,14 +6,18 @@ import {
   updateStructure,
   deleteStructure
 } from "../controllers/structureController.js";
+import { protect } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
-router.post("/structure", createStructure);
-router.get("/structure", getStructure);
-router.get("/structure/:id/children", getStructureChildren);
-router.put("/structure/:id", updateStructure);
-router.delete("/structure/:id", deleteStructure);
+// require authentication for all structure endpoints
+router.use(protect);
+
+router.post("/", createStructure);
+router.get("/", getStructure);
+router.get("/:id/children", getStructureChildren);
+router.put("/:id", updateStructure);
+router.delete("/:id", deleteStructure);
 
 export default router;
 

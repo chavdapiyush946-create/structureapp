@@ -9,6 +9,7 @@ import todoRoutes from "./routes/todoRoutes.js";
 import expenseRoutes from "./routes/expenseRoutes.js";
 import structureRoutes from "./routes/structureRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
+import permissionRoutes from "./routes/permissionRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,8 +27,9 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/auth", authRoutes);
 app.use("/api/todos", todoRoutes);
 app.use("/api/expenses", expenseRoutes);
-app.use("/api", structureRoutes);
+app.use("/api/structure", structureRoutes); // moved to avoid catching all /api requests
 app.use("/api", uploadRoutes);
+app.use("/api", permissionRoutes);
 
 const PORT = process.env.PORT || 5000;
 

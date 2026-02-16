@@ -4,15 +4,11 @@ import { promisify } from "util";
 const query = promisify(db.query).bind(db);
 const toNull = (v) => v || null;
 
-// Normalize path (Windows → Unix)
 const normalizePath = (path) => path.replace(/\\/g, "/");
 
-
-const getUniqueFileName = async (name, parent_id) => {
-  
+const getUniqueFileName = async (name, parent_id) => {  
   const sql = `
     SELECT COUNT(*) AS count
-
     FROM structure 
     WHERE name = ? AND parent_id <=> ? AND type = 'file'
   `;

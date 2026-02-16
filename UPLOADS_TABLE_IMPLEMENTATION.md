@@ -198,6 +198,61 @@ node -e "import db from './backend/config/db.js'; db.query('SELECT * FROM upload
 ✅ Download service queries both tables
 ✅ New endpoint: GET /api/uploads
 
+---
+
+## New Permissions & Ownership Schema
+
+In order to support shared folders and per-user permissions we added two
+changes:
+
+1. a new `owner_id` column on `structure` so every node can be attributed to a
+   specific user, and
+2. a new `permissions` table which holds explicit rights granted by a user to
+   another on a particular node.
+
+Run the following SQL after creating the uploads schema above:
+
+```sql
+-- add owner field to structure
+ALTER TABLE structure
+  ADD COLUMN owner_id INT NULL,
+  ADD CONSTRAINT fk_structure_owner
+    FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE SET NULL;
+
+-- table to record sharing grants
+CREATE TABLE IF NOT EXISTS permissions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  folder_id INT NOT NULL,
+  user_id INT NOT NULL,
+  can_view TINYINT(1) NOT NULL DEFAULT 0,
+  can_edit TINYINT(1) NOT NULL DEFAULT 0,
+  can_delete TINYINT(1) NOT NULL DEFAULT 0,
+  can_create TINYINT(1) NOT NULL DEFAULT 0,
+  granted_by INT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (folder_id) REFERENCES structure(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (granted_by) REFERENCES users(id) ON DELETE SET NULL
+);
+```
+
+-- If you previously attempted to create the table and received an error about
+-- `granted_by` being NOT NULL, drop the table or adjust it using:
+--
+-- ALTER TABLE permissions DROP FOREIGN KEY permissions_ibfk_3;
+-- ALTER TABLE permissions MODIFY granted_by INT NULL;
+-- ALTER TABLE permissions
+--   ADD CONSTRAINT permissions_ibfk_3 FOREIGN KEY (granted_by)
+--   REFERENCES users(id) ON DELETE SET NULL;
+
+
+Existing structure rows will have `owner_id` NULL – you can update them to the
+appropriate creator if you have that information. The `permissions` table is
+used by the backend service to decide whether a user can view/edit/delete or
+create children in a shared node.
+
+
 ## Files Modified
 
 - `backend/migrations/create_uploads_table.sql` (NEW)

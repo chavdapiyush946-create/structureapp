@@ -4,12 +4,15 @@ import { Tag } from "primereact/tag";
 import { Dialog } from "primereact/dialog";
 import CustomIcon from "./CustomIcon";
 
+
 const CustomTreeTable = ({ 
   data, 
+  currentUserId,
   onCreateFolder, 
   onCreateFile, 
   onEditNode, 
   onDeleteNode,
+  onManagePermissions,
   onFetchChildren,
   onUploadFile,
   loadingChildren = {},
@@ -23,24 +26,20 @@ const CustomTreeTable = ({
   const [fileContent, setFileContent] = useState('');
   const [loadingContent, setLoadingContent] = useState(false);
   
-  // Use external state if provided, otherwise use internal state
   const expandedNodes = externalExpandedNodes || internalExpandedNodes;
   const setExpandedNodes = onExpandedNodesChange || setInternalExpandedNodes;
 
-  // Format date for display
   const formatDate = (dateString) => {
     if (!dateString) {
       return 'N/A';
     }
-    
+
     try {
-      const date = new Date(dateString);
-      
+      const date = new Date(dateString);      
       // Check if date is valid
       if (isNaN(date.getTime())) {
         return 'Invalid Date';
-      }
-      
+      }      
       return date.toLocaleDateString('en-US', { 
         year: 'numeric',
         month: 'short', 
@@ -59,7 +58,7 @@ const CustomTreeTable = ({
     if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
     return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
   };
-  
+
   const handleFileClick = async (node) => {
     if (node.type === 'file' && node.file_path) {
       setPreviewFile(node);
@@ -69,17 +68,17 @@ const CustomTreeTable = ({
       // Load text content for text files
       const ext = node.name.split('.').pop().toLowerCase();
       const textExtensions = ['txt', 'log', 'md', 'json', 'xml', 'csv', 'js', 'jsx', 'ts', 'tsx', 'css', 'html', 'py', 'java', 'c', 'cpp', 'h'];
-
       if (textExtensions.includes(ext)) {
         setLoadingContent(true);
         try {
           const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-          const response = await fetch(`${apiUrl}/api/download/${node.id}`);          
-          
+          // Use public stream endpoint for preview (no auth required)
+          const response = await fetch(`${apiUrl}/api/stream/${node.id}`);
+
           if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
           }
-          
+
           const text = await response.text();
           console.log('Loaded file content, length:', text.length);
           setFileContent(text);
@@ -94,19 +93,48 @@ const CustomTreeTable = ({
   };
 
   // Get file URL
+  // Use public stream URL for previews (no auth) so <img>/<iframe> can load
   const getFileUrl = (node) => {
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-    return `${apiUrl}/api/download/${node.id}`;
+    return `${apiUrl}/api/stream/${node.id}`;
   };
 
-  // Check if file is previewable
+  // Download using fetch so we can include Authorization header from localStorage
+  const downloadWithAuth = async (node) => {
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const auth = localStorage.getItem('auth');
+      let token = null;
+      if (auth) {
+        try { token = JSON.parse(auth).token; } catch (e) { }
+      }
+
+      const res = await fetch(`${apiUrl}/api/download/${node.id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+
+      if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = node.name || 'file';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('downloadWithAuth error', err);
+    }
+  };
+
   const isPreviewable = (node) => {
     if (!node.file_path) return false;
     const ext = node.name.split('.').pop().toLowerCase();
     return ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'pdf', 'txt', 'log', 'md', 'json', 'xml', 'csv', 'js', 'jsx', 'ts', 'tsx', 'css', 'html', 'py', 'java', 'c', 'cpp', 'h'].includes(ext);
   };
 
-  // Get file type icon
   const getFileIcon = (node) => {
     const ext = node.name.split('.').pop().toLowerCase();
     if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'].includes(ext)) return 'pi-image';
@@ -134,6 +162,7 @@ const CustomTreeTable = ({
     if (['md'].includes(ext)) return 'language-markdown';
     return 'language-plaintext';
   };
+  
   const toggleExpansion = async (node) => {
     const nodeId = node.id;
     const newExpanded = new Set(expandedNodes);
@@ -148,8 +177,6 @@ const CustomTreeTable = ({
     }
     setExpandedNodes(newExpanded);
   };
-
-  
 
   const renderNode = (node, level = 0) => {
     const isExpanded = expandedNodes.has(node.id);
@@ -211,13 +238,24 @@ const CustomTreeTable = ({
                 <i className="pi pi-calendar text-xs"></i>
                 <span>{formatDate(node.created_at)}</span>
               </div>
-            </div>
+            </div>            
 
             {/* Actions Column - 20% */}
             <div className="col-2">
               <div className="flex gap-1 justify-content-end">
                 {isFolder ? (
                   <>
+                    {/* permission button visible if current user is owner */}
+                    {currentUserId && node.owner_id === currentUserId && onManagePermissions && (
+                      <Button
+                        icon="pi pi-key"
+                        className="p-button-rounded p-button-text p-button-secondary p-button-sm"
+                        tooltip="Manage Permissions"
+                        tooltipOptions={{ position: 'top' }}
+                        onClick={() => onManagePermissions(node)}
+                        style={{ width: '1.75rem', height: '1.75rem' }}
+                      />
+                    )}
                     <Button
                       icon="pi pi-folder-plus"
                       className="p-button-rounded p-button-text p-button-success p-button-sm"
@@ -237,17 +275,26 @@ const CustomTreeTable = ({
                   </>
                 ) : (
                   node.file_path && (
-                    <Button
-                      icon="pi pi-download"
-                      className="p-button-rounded p-button-text p-button-help p-button-sm"
-                      tooltip="Save File"
-                      tooltipOptions={{ position: 'top' }}
-                      onClick={() => {
-                        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-                        window.open(`${apiUrl}/api/download/${node.id}`, '_blank');
-                      }}
-                      style={{ width: '1.75rem', height: '1.75rem' }}
-                    />
+                    <>
+                      {isPreviewable(node) && (
+                        <Button
+                          icon="pi pi-eye"
+                          className="p-button-rounded p-button-text p-button-secondary p-button-sm"
+                          tooltip="Preview File"
+                          tooltipOptions={{ position: 'top' }}
+                          onClick={() => handleFileClick(node)}
+                          style={{ width: '1.75rem', height: '1.75rem' }}
+                        />
+                      )}
+                      <Button
+                        icon="pi pi-download"
+                        className="p-button-rounded p-button-text p-button-help p-button-sm"
+                        tooltip="Save File"
+                        tooltipOptions={{ position: 'top' }}
+                        onClick={() => downloadWithAuth(node)}
+                        style={{ width: '1.75rem', height: '1.75rem' }}
+                      />
+                    </>
                   )
                 )}
                                 
@@ -310,6 +357,7 @@ const CustomTreeTable = ({
               className="p-button-success"
               onClick={() => onCreateFolder && onCreateFolder(null, 'folder')}
             />
+                                    
             <Button
               label="Upload File"
               icon="pi pi-upload"
@@ -358,6 +406,7 @@ const CustomTreeTable = ({
         style={{ width: "800px", maxWidth: "90vw" }}
         className="p-fluid"
       >
+        
         {previewFile && (
           <div className="flex flex-column gap-3">
             {/* File Name Only */}
@@ -447,7 +496,7 @@ const CustomTreeTable = ({
                 <div className="text-900 font-medium text-lg mb-2">Preview not available</div>
                 <div className="text-600">This file type cannot be previewed</div>
               </div>
-            )}
+            )}            
 
             {/* Actions */}
             <div className="flex justify-content-end gap-2 pt-2">
@@ -461,11 +510,12 @@ const CustomTreeTable = ({
                 }}
                 style={{ borderRadius: '8px' }}
               />
+
               <Button
                 label="Download"
                 icon="pi pi-download"
                 className="p-button-lg"
-                onClick={() => window.open(getFileUrl(previewFile), '_blank')}
+                onClick={() => downloadWithAuth(previewFile)}
                 style={{ borderRadius: '8px' }}
               />
             </div>
@@ -476,4 +526,6 @@ const CustomTreeTable = ({
   );
 };
 
+
 export default CustomTreeTable;
+
