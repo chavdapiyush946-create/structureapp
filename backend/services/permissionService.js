@@ -11,6 +11,7 @@ export const grantPermission = async (folderId, userId, permissions, grantedBy) 
     can_edit: toBool(permissions.can_edit),
     can_delete: toBool(permissions.can_delete),
     can_create: toBool(permissions.can_create),
+    can_upload: toBool(permissions.can_upload),
   };
 
   const existing = await query(
@@ -21,7 +22,7 @@ export const grantPermission = async (folderId, userId, permissions, grantedBy) 
   if (existing.length) {
     await query(
       `UPDATE permissions SET 
-        can_view=?, can_edit=?, can_delete=?, can_create=?,         
+        can_view=?, can_edit=?, can_delete=?, can_create=?, can_upload=?,        
         granted_by=?, updated_at=NOW()
        WHERE id=?`,
       [...Object.values(perms), grantedBy, existing[0].id]
@@ -31,8 +32,8 @@ export const grantPermission = async (folderId, userId, permissions, grantedBy) 
 
   const result = await query(
     `INSERT INTO permissions
-      (folder_id, user_id, can_view, can_edit, can_delete, can_create, granted_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      (folder_id, user_id, can_view, can_edit, can_delete, can_create, can_upload, granted_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [folderId, userId, ...Object.values(perms), grantedBy]
   );
     return { id: result.insertId, folder_id: folderId, user_id: userId, ...perms };
