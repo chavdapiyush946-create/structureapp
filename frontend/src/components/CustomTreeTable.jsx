@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { Button } from "primereact/button";
 import { Tag } from "primereact/tag";
-import { Dialog } from "primereact/dialog";
 import CustomIcon from "./CustomIcon";
-
+import FilePreview, { isPreviewable, downloadWithAuth } from "./FilePreview";
 
 const CustomTreeTable = ({ 
   data, 
@@ -21,10 +20,7 @@ const CustomTreeTable = ({
   onExpandedNodesChange,
 }) => {
   const [internalExpandedNodes, setInternalExpandedNodes] = useState(new Set());
-  const [previewFile, setPreviewFile] = useState(null);
-  const [showPreview, setShowPreview] = useState(false);
-  const [fileContent, setFileContent] = useState('');
-  const [loadingContent, setLoadingContent] = useState(false);
+  const [previewNode, setPreviewNode] = useState(null);
   
   const expandedNodes = externalExpandedNodes || internalExpandedNodes;
   const setExpandedNodes = onExpandedNodesChange || setInternalExpandedNodes;
@@ -33,7 +29,6 @@ const CustomTreeTable = ({
     if (!dateString) {
       return 'N/A';
     }
-
     try {
       const date = new Date(dateString);      
       // Check if date is valid
@@ -50,126 +45,19 @@ const CustomTreeTable = ({
     }
   };
 
-  // Format file size
-  const formatFileSize = (bytes) => {
-    if (!bytes) return 'N/A';
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
-    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
-    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
-  };
 
-  const handleFileClick = async (node) => {
+  const openPreview = (node) => {
     if (node.type === 'file' && node.file_path) {
-      setPreviewFile(node);
-      setShowPreview(true);
-      setFileContent('');
-      
-      // Load text content for text files
-      const ext = node.name.split('.').pop().toLowerCase();
-      const textExtensions = ['txt', 'log', 'md', 'json', 'xml', 'csv', 'js', 'jsx', 'ts', 'tsx', 'css', 'html', 'py', 'java', 'c', 'cpp', 'h'];
-      if (textExtensions.includes(ext)) {
-        setLoadingContent(true);
-        try {
-          const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-          // Use public stream endpoint for preview (no auth required)
-          const response = await fetch(`${apiUrl}/api/stream/${node.id}`);
-
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-
-          const text = await response.text();
-          console.log('Loaded file content, length:', text.length);
-          setFileContent(text);
-        } catch (error) {
-          console.error('Error loading file content:', error);
-          setFileContent(`Error loading file content: ${error.message}`);
-        } finally {
-          setLoadingContent(false);
-        }
-      }
+      setPreviewNode(node);
     }
   };
 
-  // Get file URL
-  // Use public stream URL for previews (no auth) so <img>/<iframe> can load
-  const getFileUrl = (node) => {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-    return `${apiUrl}/api/stream/${node.id}`;
-  };
-
-  // Download using fetch so we can include Authorization header from localStorage
-  const downloadWithAuth = async (node) => {
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      const auth = localStorage.getItem('auth');
-      let token = null;
-      if (auth) {
-        try { token = JSON.parse(auth).token; } catch (e) { }
-      }
-
-      const res = await fetch(`${apiUrl}/api/download/${node.id}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
-      });
-
-      if (!res.ok) throw new Error(`Download failed: ${res.status}`);
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = node.name || 'file';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('downloadWithAuth error', err);
-    }
-  };
-
-  const isPreviewable = (node) => {
-    if (!node.file_path) return false;
-    const ext = node.name.split('.').pop().toLowerCase();
-    return ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'pdf', 'txt', 'log', 'md', 'json', 'xml', 'csv', 'js', 'jsx', 'ts', 'tsx', 'css', 'html', 'py', 'java', 'c', 'cpp', 'h'].includes(ext);
-  };
-
-  const getFileIcon = (node) => {
-    const ext = node.name.split('.').pop().toLowerCase();
-    if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'].includes(ext)) return 'pi-image';
-    if (['pdf'].includes(ext)) return 'pi-file-pdf';
-    if (['doc', 'docx'].includes(ext)) return 'pi-file-word';
-    if (['xls', 'xlsx'].includes(ext)) return 'pi-file-excel';
-    if (['txt', 'log', 'md'].includes(ext)) return 'pi-file';
-    if (['json', 'xml'].includes(ext)) return 'pi-code';
-    if (['js', 'jsx', 'ts', 'tsx', 'css', 'html', 'py', 'java', 'c', 'cpp', 'h'].includes(ext)) return 'pi-code';
-    if (['zip', 'rar', '7z'].includes(ext)) return 'pi-box';
-    return 'pi-file';
-  };
-
-  // Get syntax highlighting class
-  const getSyntaxClass = (filename) => {
-    const ext = filename.split('.').pop().toLowerCase();
-    if (['js', 'jsx', 'ts', 'tsx'].includes(ext)) return 'language-javascript';
-    if (['json'].includes(ext)) return 'language-json';
-    if (['html'].includes(ext)) return 'language-html';
-    if (['css'].includes(ext)) return 'language-css';
-    if (['py'].includes(ext)) return 'language-python';
-    if (['java'].includes(ext)) return 'language-java';
-    if (['c', 'cpp', 'h'].includes(ext)) return 'language-c';
-    if (['xml'].includes(ext)) return 'language-xml';
-    if (['md'].includes(ext)) return 'language-markdown';
-    return 'language-plaintext';
-  };
-  
   const toggleExpansion = async (node) => {
     const nodeId = node.id;
     const newExpanded = new Set(expandedNodes);
     if (newExpanded.has(nodeId)) {
       newExpanded.delete(nodeId);
     } else {
-      // Expand
       newExpanded.add(nodeId);
       if (node.type === 'folder' && !node.childrenLoaded && onFetchChildren) {
         await onFetchChildren(nodeId);
@@ -188,10 +76,9 @@ const CustomTreeTable = ({
 
     return (
       <div key={node.id}>
-        {/* Main Row */}
         <div 
           className="custom-tree-row py-1 px-2 hover:surface-100 transition-colors transition-duration-150"
-          style={{ borderBottom: '1px solid #000000' }}
+          style={{ borderBottom: '1px solid #000000' }}          
         >
           <div className="grid align-items-center">
             {/* Name Column - 40% */}
@@ -202,7 +89,7 @@ const CustomTreeTable = ({
                   <Button
                     icon={isLoadingChildren ? "pi pi-spin pi-spinner" : (isExpanded ? "pi pi-chevron-down" : "pi pi-chevron-right")}
                     className="p-button-text p-button-rounded p-button-sm"
-                    onClick={() => toggleExpansion(node)}
+                    onClick={() => toggleExpansion(node)}                  
                     disabled={isLoadingChildren}
                     style={{ minWidth: '1.5rem', height: '1.5rem', padding: '0.25rem' }}
                   />
@@ -214,7 +101,7 @@ const CustomTreeTable = ({
                 <span 
                   className="font-medium text-900 text-sm"
                   style={{ cursor: node.type === 'file' && node.file_path ? 'pointer' : 'default' }}
-                  onClick={() => node.type === 'file' && handleFileClick(node)}
+                  onClick={() => node.type === 'file' && openPreview(node)}
                 >
                   {node.name}
                 </span>
@@ -245,8 +132,8 @@ const CustomTreeTable = ({
               <div className="flex gap-1 justify-content-end">
                 {isFolder ? (
                   <>
-                    {/* permission button visible if current user is owner */}
-                    {currentUserId && node.owner_id === currentUserId && onManagePermissions && (
+                    {/* permission button visible only if current user is owner AND it's a root folder (no parent) */}
+                    {currentUserId && node.owner_id === currentUserId && !node.parent_id && onManagePermissions && (
                       <Button
                         icon="pi pi-key"
                         className="p-button-rounded p-button-text p-button-secondary p-button-sm"
@@ -256,22 +143,26 @@ const CustomTreeTable = ({
                         style={{ width: '1.75rem', height: '1.75rem' }}
                       />
                     )}
-                    <Button
-                      icon="pi pi-folder-plus"
-                      className="p-button-rounded p-button-text p-button-success p-button-sm"
-                      tooltip="Add Folder"
-                      tooltipOptions={{ position: 'top' }}
-                      onClick={() => onCreateFolder && onCreateFolder(node, 'folder')}
-                      style={{ width: '1.75rem', height: '1.75rem' }}
-                    />
-                    <Button
-                      icon="pi pi-upload"
-                      className="p-button-rounded p-button-text p-button-info p-button-sm"
-                      tooltip="Upload File"
-                      tooltipOptions={{ position: 'top' }}
-                      onClick={() => onUploadFile && onUploadFile(node)}
-                      style={{ width: '1.75rem', height: '1.75rem' }}
-                    />
+                    {(node.can_create || (currentUserId && node.owner_id === currentUserId)) && (
+                      <Button
+                        icon="pi pi-folder-plus"
+                        className="p-button-rounded p-button-text p-button-success p-button-sm"
+                        tooltip="Add Folder"
+                        tooltipOptions={{ position: 'top' }}
+                        onClick={() => onCreateFolder && onCreateFolder(node, 'folder')}
+                        style={{ width: '1.75rem', height: '1.75rem' }}
+                      />
+                    )}
+                    {(node.can_upload || node.can_create || (currentUserId && node.owner_id === currentUserId)) && (
+                      <Button
+                        icon="pi pi-upload"
+                        className="p-button-rounded p-button-text p-button-info p-button-sm"
+                        tooltip="Upload File"
+                        tooltipOptions={{ position: 'top' }}
+                        onClick={() => onUploadFile && onUploadFile(node)}
+                        style={{ width: '1.75rem', height: '1.75rem' }}
+                      />
+                    )}
                   </>
                 ) : (
                   node.file_path && (
@@ -282,7 +173,7 @@ const CustomTreeTable = ({
                           className="p-button-rounded p-button-text p-button-secondary p-button-sm"
                           tooltip="Preview File"
                           tooltipOptions={{ position: 'top' }}
-                          onClick={() => handleFileClick(node)}
+                          onClick={() => openPreview(node)}
                           style={{ width: '1.75rem', height: '1.75rem' }}
                         />
                       )}
@@ -298,14 +189,29 @@ const CustomTreeTable = ({
                   )
                 )}
                                 
-                <Button
-                  icon="pi pi-trash"
-                  className="p-button-rounded p-button-text p-button-danger p-button-sm"
-                  tooltip="Delete"
-                  tooltipOptions={{ position: 'top' }}
-                  onClick={() => onDeleteNode && onDeleteNode(node)}
-                  style={{ width: '1.75rem', height: '1.75rem' }}
-                />
+                {/* edit button - show if user has edit permission or owns the item */}
+                {onEditNode && (node.can_edit || (currentUserId && node.owner_id === currentUserId)) && (
+                  <Button
+                    icon="pi pi-pencil"
+                    className="p-button-rounded p-button-text p-button-warning p-button-sm"
+                    tooltip="Edit"
+                    tooltipOptions={{ position: 'top' }}
+                    onClick={() => onEditNode && onEditNode(node)}
+                    style={{ width: '1.75rem', height: '1.75rem' }}
+                  />
+                )}
+
+                {/* delete button - show if user has delete permission or owns the item */}
+                {onDeleteNode && (node.can_delete || (currentUserId && node.owner_id === currentUserId)) && (
+                  <Button
+                    icon="pi pi-trash"
+                    className="p-button-rounded p-button-text p-button-danger p-button-sm"
+                    tooltip="Delete"
+                    tooltipOptions={{ position: 'top' }}
+                    onClick={() => onDeleteNode && onDeleteNode(node)}
+                    style={{ width: '1.75rem', height: '1.75rem' }}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -322,7 +228,7 @@ const CustomTreeTable = ({
         )}
 
         {/* Children Rows */}
-        {hasChildren && isExpanded && (          
+        {hasChildren && isExpanded && (
           <>
             {node.children.map(child => renderNode(child, level + 1))}
           </>
@@ -330,6 +236,8 @@ const CustomTreeTable = ({
       </div>
     );
   };
+
+  // preview handling moved to FilePreview component
   if (loading) {
     return (
       <div className="custom-tree-table">
@@ -387,144 +295,11 @@ const CustomTreeTable = ({
         {data.map(node => renderNode(node, 0))}
       </div>
 
-      {/* File Preview Dialog */}
-      <Dialog
-        visible={showPreview}
-        onHide={() => {
-          setShowPreview(false);
-          setPreviewFile(null);
-        }}
-        header={
-          <div className="flex align-items-center gap-3">
-            <div className="bg-blue-100 border-circle p-2">
-              <i className={`pi ${previewFile ? getFileIcon(previewFile) : 'pi-file'} text-blue-500 text-xl`}></i>
-            </div>
-            <span className="text-2xl font-bold">File Preview</span>
-          </div>
-        }
-        modal
-        style={{ width: "800px", maxWidth: "90vw" }}
-        className="p-fluid"
-      >
-        
-        {previewFile && (
-          <div className="flex flex-column gap-3">
-            {/* File Name Only */}
-            <div className="flex align-items-center gap-2">
-              <i className={`pi ${getFileIcon(previewFile)} text-2xl text-primary`}></i>
-              <div className="font-bold text-xl text-900">{previewFile.name}</div>
-            </div>
-
-            {/* File Preview */}
-            {isPreviewable(previewFile) && (
-              <div className="border-1 surface-border border-round" style={{ maxHeight: '500px', overflow: 'auto' }}>
-                {(() => {
-                  const ext = previewFile.name.split('.').pop().toLowerCase();
-                  const fileUrl = getFileUrl(previewFile);
-                  
-                  if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'].includes(ext)) {
-                    return (
-                      <div className="text-center p-3">
-                        <img 
-                          src={fileUrl} 
-                          alt={previewFile.name}
-                          style={{ maxWidth: '100%', maxHeight: '450px', objectFit: 'contain' }}
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                            e.target.nextSibling.style.display = 'block';
-                          }}
-                        />
-                        <div style={{ display: 'none' }} className="text-500">
-                          <i className="pi pi-exclamation-triangle text-4xl mb-3"></i>
-                          <div>Unable to load image preview</div>
-                        </div>
-                      </div>
-                    );
-                  }
-                  
-                  if (ext === 'pdf') {
-                    return (
-                      <iframe
-                        src={fileUrl}
-                        style={{ width: '100%', height: '500px', border: 'none' }}
-                        title={previewFile.name}
-                      />
-                    );
-                  }
-                  
-                  if (['txt', 'log', 'md', 'json', 'xml', 'csv', 'js', 'jsx', 'ts', 'tsx', 'css', 'html', 'py', 'java', 'c', 'cpp', 'h'].includes(ext)) {
-                    return (
-                      <div>
-                        {loadingContent ? (
-                          <div className="text-center p-5">
-                            <i className="pi pi-spin pi-spinner text-3xl text-primary mb-3"></i>
-                            <div className="text-600">Loading...</div>
-                          </div>
-                        ) : fileContent ? (
-                          <pre 
-                            className={`text-sm font-mono m-0 ${getSyntaxClass(previewFile.name)}`}
-                            style={{ 
-                              whiteSpace: 'pre-wrap', 
-                              wordBreak: 'break-word',
-                              maxHeight: '500px',
-                              overflow: 'auto',
-                              padding: '1.5rem',
-                              backgroundColor: '#f8f9fa',
-                              margin: 0
-                            }}
-                          >
-                            {fileContent}
-                          </pre>
-                        ) : (
-                          <div className="text-center p-5 text-500">
-                            <i className="pi pi-file text-4xl mb-3"></i>
-                            <div>No content available</div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  }
-                  
-                  return null;
-                })()}
-              </div>
-            )}
-
-            {!isPreviewable(previewFile) && (
-              <div className="text-center p-5 surface-50 border-round">
-                <i className="pi pi-eye-slash text-5xl text-400 mb-3"></i>
-                <div className="text-900 font-medium text-lg mb-2">Preview not available</div>
-                <div className="text-600">This file type cannot be previewed</div>
-              </div>
-            )}            
-
-            {/* Actions */}
-            <div className="flex justify-content-end gap-2 pt-2">
-              <Button
-                label="Close"
-                icon="pi pi-times"
-                className="p-button-text p-button-lg"
-                onClick={() => {
-                  setShowPreview(false);
-                  setPreviewFile(null);
-                }}
-                style={{ borderRadius: '8px' }}
-              />
-
-              <Button
-                label="Download"
-                icon="pi pi-download"
-                className="p-button-lg"
-                onClick={() => downloadWithAuth(previewFile)}
-                style={{ borderRadius: '8px' }}
-              />
-            </div>
-          </div>
-        )}
-      </Dialog>
+      {/* File preview moved to FilePreview component */}
+      <FilePreview node={previewNode} visible={!!previewNode} onHide={() => setPreviewNode(null)} />
     </div>
   );
-};
+}
 
 
 export default CustomTreeTable;

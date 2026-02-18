@@ -12,9 +12,10 @@ import { useNavigate } from "react-router-dom";
 const UserDashboard = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const { name, email } = useSelector((s) => s.auth);
+  const { name,email} = useSelector((s) => s.auth);
   const { todos } = useSelector((s) => s.todos);
-  const { expenses } = useSelector((s) => s.expenses);
+  const {expenses} = useSelector((s) => s.expenses);
+  
 
   useEffect(() => {
     dispatch(fetchTodos());
@@ -37,6 +38,7 @@ const UserDashboard = () => {
       <Tag 
         value={rowData.status} 
         severity={status.severity} 
+
         icon={status.icon}
         className="text-sm"
       />
@@ -48,14 +50,11 @@ const UserDashboard = () => {
       <div className="p-6">
         {/* Welcome Header */}
         <div className="flex align-items-center justify-content-between mb-6">
-          <div className="flex align-items-center">
-           
+          <div className="flex align-items-center">           
             <div>
-              <h1 className="text-4xl font-bold text-900 m-0">Welcome back, {name}!</h1>
-              
+              <h1 className="text-4xl font-bold text-900 m-0">Welcome back, {name}!</h1>              
             </div>
-          </div>
-        
+          </div>        
         </div>
 
         {/* Total Expenses Card */}
@@ -70,8 +69,7 @@ const UserDashboard = () => {
                     {expenses.length} transactions
                   </div>
                 </div>
-                <div className="flex align-items-center justify-content-center bg-green-100 border-round" style={{width: '3rem', height: '3rem'}}>
-                  
+                <div className="flex align-items-center justify-content-center bg-green-100 border-round" style={{width: '3rem', height: '3rem'}}>                  
                 </div>
               </div>
             </Card>
@@ -87,28 +85,28 @@ const UserDashboard = () => {
                   <i className="pi pi-inbox text-6xl text-400 mb-4"></i>
                   <div className="text-900 font-medium text-xl mb-2">No todos yet</div>
                   <div className="text-600 mb-4">Create your first todo to get started!</div>
-                  <Button
+                  <Button                  
                     label="Create Todo"
                     icon="pi pi-plus"
                     className="p-button-success"
-                    onClick={() => navigate("/todo")}
+                    onClick={() => navigate("/todo")}                    
                   />
                 </div>
-              ) : (
+              ):(
                 <>
                   <DataTable
                     value={todos}
                     paginator
                     rows={10}
                     className="p-datatable-gridlines"
-                    paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport RowsPerPageDropdown"
-                    currentPageReportTemplate="Showing {first} to {last} of {totalRecords} todos"
+                    paginatorTemplate="FirstPageLInk PrevPageLInk PageLinks NextPageLink LastPageLink CurrentPageReport RowsPerPageDropdown"
+                    currentPageReportTemplate="Showing {first} to {last} of {totalRecords} todos"                    
                   >
                     <Column 
-                      field="title" 
+                      field="title"                       
                       header="Title" 
-                      className="font-medium"
-                      style={{ minWidth: '200px' }}
+                      className="font-medium"                      
+                      style={{ minWidth: '200px'}}
                     />
                     <Column 
                       field="description" 
@@ -121,15 +119,16 @@ const UserDashboard = () => {
                       }}
                       style={{ minWidth: '250px' }}
                     />
-                    <Column 
-                      header="Status" 
+                    
+                    <Column                         
+                      header="Status"                       
                       body={statusTemplate} 
                       sortable
                       field="status"
                       style={{ minWidth: '120px' }}
                     />
-                  </DataTable>
-                  
+                    
+                  </DataTable>                  
                   <div className="text-center mt-4">
                     <div className="text-600">
                       Total: {todos.length} todos

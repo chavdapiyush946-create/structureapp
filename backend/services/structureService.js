@@ -117,7 +117,7 @@ export const getTree = async (userId) => {
 
     // filter by permissions/view
     try {
-      const { getAccessibleNodeIds } = await import("./permissionService.js");
+      const { getAccessibleNodeIds, checkUserPermission } = await import("./permissionService.js");
       const accessible = await getAccessibleNodeIds(userId);
       const filtered = rows.filter(r => accessible.has(r.id));
       const map = {};
@@ -132,6 +132,19 @@ export const getTree = async (userId) => {
           tree.push(map[r.id]);
         }
       });
+
+      // attach permission flags for current user on each node
+      const attachPerms = async () => {
+        const ids = Object.keys(map).map(Number);
+        for (const id of ids) {
+          map[id].can_view = await checkUserPermission(userId, id, 'view');
+          map[id].can_edit = await checkUserPermission(userId, id, 'edit');
+          map[id].can_delete = await checkUserPermission(userId, id, 'delete');
+          map[id].can_create = await checkUserPermission(userId, id, 'create');
+          map[id].can_upload = await checkUserPermission(userId, id, 'upload');
+        }
+      };
+      await attachPerms();
       return tree;
     } catch (permErr) {
       // if permissions fail (e.g. missing owner_id column), return full tree
@@ -300,9 +313,18 @@ export const getNodeChildren = async (folderId, userId) => {
     );
     if (!userId) return rows;
     try {
-      const { getAccessibleNodeIds } = await import("./permissionService.js");
+      const { getAccessibleNodeIds, checkUserPermission } = await import("./permissionService.js");
       const accessible = await getAccessibleNodeIds(userId);
-      return rows.filter(r => accessible.has(r.id));
+      const filtered = rows.filter(r => accessible.has(r.id));
+      // attach permission flags
+      for (const r of filtered) {
+        r.can_view = await checkUserPermission(userId, r.id, 'view');
+        r.can_edit = await checkUserPermission(userId, r.id, 'edit');
+        r.can_delete = await checkUserPermission(userId, r.id, 'delete');
+        r.can_create = await checkUserPermission(userId, r.id, 'create');
+        r.can_upload = await checkUserPermission(userId, r.id, 'upload');
+      }
+      return filtered;
     } catch (permErr) {
       console.warn('Permission check failed in getNodeChildren, returning unfiltered rows', permErr);
       return rows;
