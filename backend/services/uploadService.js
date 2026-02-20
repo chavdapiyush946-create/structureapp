@@ -32,6 +32,7 @@ export const saveUploadedFile = async ({
   parent_id,
   fileSize,
   mimeType,
+  owner_id,
 }) => {
   try {
     const normalizedPath = normalizePath(filePath);
@@ -52,12 +53,36 @@ export const saveUploadedFile = async ({
       ]
     );
 
-    // Save in structure table
-    const structureResult = await query(
-      `INSERT INTO structure (name, type, parent_id, file_path)
-       VALUES (?, 'file', ?, ?)`,
-      [finalName, toNull(parent_id), normalizedPath]
-    );
+    // Save in structure table (include owner_id if available)
+    let structureResult;
+    try {
+      structureResult = await query(
+        `INSERT INTO structure (name, type, parent_id, file_path, owner_id)
+         VALUES (?, 'file', ?, ?, ?)`,
+        [finalName, toNull(parent_id), normalizedPath, owner_id || null]
+      );
+    } catch (err) {
+      if (err.code === 'ER_BAD_FIELD_ERROR' && err.message.includes('owner_id')) {
+        // fallback if owner_id column doesn't exist
+        structureResult = await query(
+          `INSERT INTO structure (name, type, parent_id, file_path)
+           VALUES (?, 'file', ?, ?)`,
+          [finalName, toNull(parent_id), normalizedPath]
+        );
+      } else {
+        throw err;
+      }
+    }
+    // Try to resolve owner_name if owner_id provided
+    let owner_name = null;
+    if (owner_id) {
+      try {
+        const rows = await query(`SELECT name FROM users WHERE id = ?`, [owner_id]);
+        owner_name = rows[0]?.name || null;
+      } catch (e) {
+        // ignore
+      }
+    }
 
     return {
       id: structureResult.insertId,
@@ -68,6 +93,8 @@ export const saveUploadedFile = async ({
       file_path: normalizedPath,
       file_size: fileSize,
       mime_type: mimeType,
+      owner_id: owner_id || null,
+      owner_name,
       created_at: new Date(),
     };
   } catch (err) {

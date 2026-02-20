@@ -4,8 +4,8 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 
-
 const __filename = fileURLToPath(import.meta.url);
+
 const __dirname = path.dirname(__filename);
 
 const query = promisify(db.query).bind(db);
@@ -15,8 +15,6 @@ export const createNode = async ({ name, type, parent_id, file_path = null, owne
   if (!name || !type) {
     throw new Error("Name and type are required");
   }
-  // owner_id may not exist in DB yet; we'll pass null if undefined
-  
   if (name.length > 255) {
     throw new Error("name very long");
   }
@@ -94,78 +92,100 @@ export const createNode = async ({ name, type, parent_id, file_path = null, owne
   }
 };
 
-/* GET TREE STRUCTURE */
 export const getTree = async (userId) => {
   try {
-    const rows = await query("SELECT * FROM structure ORDER BY type ASC, name ASC");    
-    // if no userId passed, return full tree
+    // Fetch all nodes with owner name (we'll build hierarchy on the server)
+    const rows = await query(
+      `SELECT s.*, u.name as owner_name    
+       FROM structure s                      
+       LEFT JOIN users u ON s.owner_id = u.id         
+           
+       ORDER BY s.type ASC, s.name ASC`              
+    );
+
+    if (!rows.length) return [];
+
+    // If no userId, set default numeric flags = 0 and return hierarchical tree
     if (!userId) {
-      const map = {};
+      for (const r of rows) {
+        
+        r.can_view = 0;
+        r.can_edit = 0;
+        r.can_delete = 0;
+        r.can_create = 0;
+        r.can_upload = 0;
+      }
+      const map = new Map();
+      for (const r of rows) map.set(r.id, { ...r, children: [] });
       const tree = [];
-      rows.forEach(r => {
-        map[r.id] = { ...r, children: [] };
-      });
-      rows.forEach(r => {
-        if (r.parent_id && map[r.parent_id]) {
-          map[r.parent_id].children.push(map[r.id]);
-        } else if (!r.parent_id) {
-          tree.push(map[r.id]);
+      for (const node of map.values()) {
+        if (!node.parent_id) {
+          tree.push(node);
+        } else {
+          const parent = map.get(node.parent_id);
+          if (parent) parent.children.push(node);
+          
         }
-      });
+      }
       return tree;
     }
 
-    // filter by permissions/view
+    // When userId present, compute accessible nodes and attach numeric flags
     try {
       const { getAccessibleNodeIds, checkUserPermission } = await import("./permissionService.js");
       const accessible = await getAccessibleNodeIds(userId);
-      const filtered = rows.filter(r => accessible.has(r.id));
-      const map = {};
-      const tree = [];
-      filtered.forEach(r => {
-        map[r.id] = { ...r, children: [] };
-      });
-      filtered.forEach(r => {
-        if (r.parent_id && map[r.parent_id]) {
-          map[r.parent_id].children.push(map[r.id]);
-        } else if (!r.parent_id) {
-          tree.push(map[r.id]);
-        }
-      });
 
-      // attach permission flags for current user on each node
-      const attachPerms = async () => {
-        const ids = Object.keys(map).map(Number);
-        for (const id of ids) {
-          map[id].can_view = await checkUserPermission(userId, id, 'view');
-          map[id].can_edit = await checkUserPermission(userId, id, 'edit');
-          map[id].can_delete = await checkUserPermission(userId, id, 'delete');
-          map[id].can_create = await checkUserPermission(userId, id, 'create');
-          map[id].can_upload = await checkUserPermission(userId, id, 'upload');
+      // start with nodes the user owns or explicitly has access to
+      const initialIds = new Set(rows.filter(r => (r.owner_id === userId) || accessible.has(r.id)).map(r => r.id));
+
+      // build quick lookup of all rows by id
+      const allById = new Map(rows.map(r => [r.id, r]));
+
+      // ensure we also include ancestor (parent) nodes so the hierarchy can be built
+      const needed = new Set(initialIds);
+      for (const id of Array.from(initialIds)) {
+        let cur = allById.get(id);
+        while (cur && cur.parent_id) {
+          const pid = cur.parent_id;
+          if (needed.has(pid)) break;
+          const parent = allById.get(pid);
+          if (!parent) break;
+          needed.add(pid);
+          cur = parent;
         }
-      };
-      await attachPerms();
+      }
+
+      const finalNodes = rows.filter(r => needed.has(r.id));
+
+      // attach numeric permission flags for the final nodes
+      for (const r of finalNodes) {
+        r.can_view = (await checkUserPermission(userId, r.id, 'view')) ? 1 : 0;
+        r.can_edit = (await checkUserPermission(userId, r.id, 'edit')) ? 1 : 0;
+        r.can_delete = (await checkUserPermission(userId, r.id, 'delete')) ? 1 : 0;
+        r.can_create = (await checkUserPermission(userId, r.id, 'create')) ? 1 : 0;
+        r.can_upload = (await checkUserPermission(userId, r.id, 'upload')) ? 1 : 0;        
+      }
+      
+      const map = new Map();      
+      for (const r of finalNodes) map.set(r.id, { ...r, children: [] });      
+      const tree = [];      
+      for (const node of map.values()) {
+        if (!node.parent_id) {
+          tree.push(node);
+        } else {
+          const parent = map.get(node.parent_id);
+          // if (parent) parent.children.push(node);
+        }
+      }
       return tree;
     } catch (permErr) {
-      // if permissions fail (e.g. missing owner_id column), return full tree
-      console.warn('Permission check failed, returning unfiltered tree', permErr);
-      const map = {};
-      const tree = [];
-      rows.forEach(r => {
-        map[r.id] = { ...r, children: [] };
-      });
-      rows.forEach(r => {
-        if (r.parent_id && map[r.parent_id]) {
-          map[r.parent_id].children.push(map[r.id]);
-        } else if (!r.parent_id) {
-          tree.push(map[r.id]);
-        }
-      });
-      return tree;
+      console.warn('Permission check failed in getTree, returning flat rows', permErr);
+      return rows;
     }
   } catch (err) {
     console.error('Database error:', err);
     throw new Error("Failed to fetch structure");
+    
   }
 };
 /* UPDATE NODE */
@@ -177,11 +197,12 @@ export const updateNode = async (nodeId, updates, userId) => {
     }
     const currentNode = result[0];
     // permission check: owner or edit permission (skip if owner_id not stored yet)
-    if (currentNode.owner_id !== undefined && currentNode.owner_id !== null && currentNode.owner_id !== userId) {
+    if (currentNode.owner_id !== undefined && currentNode.owner_id !== null && currentNode.owner_id !== userId) {      
       const { checkUserPermission } = await import("./permissionService.js");
       const allowed = await checkUserPermission(userId, nodeId, 'edit');
       if (!allowed) {
         throw new Error("You do not have permission to edit this node");
+        
       }
     }
 
@@ -308,7 +329,11 @@ export const deleteNode = async (nodeId, userId) => {
 export const getNodeChildren = async (folderId, userId) => {
   try {
     const rows = await query(
-      "SELECT * FROM structure WHERE parent_id = ? ORDER BY type DESC, name ASC",
+      `SELECT s.*, u.name as owner_name
+       FROM structure s
+       LEFT JOIN users u ON s.owner_id = u.id
+       WHERE s.parent_id = ?
+       ORDER BY s.type DESC, s.name ASC`,
       [folderId]
     );
     if (!userId) return rows;
@@ -316,13 +341,13 @@ export const getNodeChildren = async (folderId, userId) => {
       const { getAccessibleNodeIds, checkUserPermission } = await import("./permissionService.js");
       const accessible = await getAccessibleNodeIds(userId);
       const filtered = rows.filter(r => accessible.has(r.id));
-      // attach permission flags
+      // attach numeric permission flags
       for (const r of filtered) {
-        r.can_view = await checkUserPermission(userId, r.id, 'view');
-        r.can_edit = await checkUserPermission(userId, r.id, 'edit');
-        r.can_delete = await checkUserPermission(userId, r.id, 'delete');
-        r.can_create = await checkUserPermission(userId, r.id, 'create');
-        r.can_upload = await checkUserPermission(userId, r.id, 'upload');
+        r.can_view = (await checkUserPermission(userId, r.id, 'view')) ? 1 : 0;
+        r.can_edit = (await checkUserPermission(userId, r.id, 'edit')) ? 1 : 0;
+        r.can_delete = (await checkUserPermission(userId, r.id, 'delete')) ? 1 : 0;
+        r.can_create = (await checkUserPermission(userId, r.id, 'create')) ? 1 : 0;
+        r.can_upload = (await checkUserPermission(userId, r.id, 'upload')) ? 1 : 0;
       }
       return filtered;
     } catch (permErr) {

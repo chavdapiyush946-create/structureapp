@@ -1,5 +1,6 @@
 import db from "../config/db.js";
 import { promisify } from "util";
+import { getUsers } from "./userService.js";
 
 const query = promisify(db.query).bind(db);
 const toBool = (v) => !!v;
@@ -46,17 +47,19 @@ export const checkUserPermission = async (userId, folderId, action) => {
     edit: "can_edit",
     delete: "can_delete",
     create: "can_create",
-    upload: "can_create", // Upload requires create permission
+    upload: "can_upload",
   };
 
   if (!map[action]) return false;
   
-  // Get the folder and all its parents
+  // Get the folder and all its parents (only call once)
   const getParentChain = async (fid) => {
     const chain = [];
     let currentId = fid;
+    const visited = new Set();
     
-    while (currentId) {
+    while (currentId && !visited.has(currentId)) {
+      visited.add(currentId);
       chain.push(currentId);
       const rows = await query(
         "SELECT parent_id FROM structure WHERE id = ?",
@@ -78,32 +81,34 @@ export const checkUserPermission = async (userId, folderId, action) => {
     return !!rows[0]?.allowed;
   };
 
-  // Check if user owns the folder or any parent in the chain
   try {
+    // Get parent chain once
     const parentChain = await getParentChain(folderId);
+    
+    // Check if user owns any folder in the chain
     for (const id of parentChain) {
-      const folderRows = await query(
-        "SELECT owner_id FROM structure WHERE id = ?",
-        [id]
-      );
-      if (folderRows.length && folderRows[0].owner_id === userId) {
+      try {
+        const folderRows = await query(
+          "SELECT owner_id FROM structure WHERE id = ?",
+          [id]
+        );
+        if (folderRows.length && folderRows[0].owner_id === userId) {
+          return true;
+        }
+      } catch (err) {
+        // owner_id column might not exist, continue
+      }
+    }
+    
+    // Check explicit permissions on any folder in the chain (inherited)
+    for (const id of parentChain) {
+      if (await hasPerm(id)) {        
         return true;
       }
     }
   } catch (err) {
-    // owner_id column might not exist, continue with permission check
-  }
-  
-  // Check explicit permissions on the folder or any parent (inherited)
-  try {
-    const parentChain = await getParentChain(folderId);
-    for (const id of parentChain) {
-      if (await hasPerm(id)) {
-        return true;
-      }
-    }
-  } catch (err) {
-    console.error("Error checking parent permissions:", err);
+    console.error("Error checking permission:", err);
+    return false;
   }
   
   return false;
@@ -148,3 +153,37 @@ export const getAccessibleNodeIds = async (userId) => {
   } while (changed);
   return set;
 };
+
+/* -------------------- FETCH ALL USERS WITH PERMISSIONS FOR FOLDER -------------------- */
+export const getUsersWithPermissionsForFolder = async (folderId) => {
+  try {
+    const users = await getUsers();
+    
+    // For each user, fetch their permissions for this specific folder
+    const usersWithPerms = await Promise.all(
+      users.map(async (user) => {
+        const perms = await query(
+          `SELECT can_view, can_edit, can_delete, can_create, can_upload
+           FROM permissions 
+           WHERE folder_id = ? AND user_id = ?`,
+          [folderId, user.id]
+        );
+        
+        return {
+          ...user,
+          can_view: toBool(perms[0]?.can_view),
+          can_edit: toBool(perms[0]?.can_edit),
+          can_delete: toBool(perms[0]?.can_delete),
+          can_create: toBool(perms[0]?.can_create),
+          can_upload: toBool(perms[0]?.can_upload),
+        };
+      })
+    );
+    
+    return usersWithPerms;
+  } catch (err) {
+    console.error("Error fetching users with permissions:", err);
+    throw err;
+  }
+};
+

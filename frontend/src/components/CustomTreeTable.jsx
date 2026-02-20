@@ -18,6 +18,7 @@ const CustomTreeTable = ({
   loading = false,
   expandedNodes: externalExpandedNodes,
   onExpandedNodesChange,
+  users = [],
 }) => {
   const [internalExpandedNodes, setInternalExpandedNodes] = useState(new Set());
   const [previewNode, setPreviewNode] = useState(null);
@@ -81,8 +82,8 @@ const CustomTreeTable = ({
           style={{ borderBottom: '1px solid #000000' }}          
         >
           <div className="grid align-items-center">
-            {/* Name Column - 40% */}
-            <div className="col-5">
+            {/* Name Column - 33% */}
+            <div className="col-4">
               <div className="flex align-items-center gap-2" style={indentStyle}>
                 {/* Expand/Collapse Button */}
                 {isFolder ? (
@@ -109,7 +110,7 @@ const CustomTreeTable = ({
               </div>
             </div>
 
-            {/* Type Column - 15% */}
+            {/* Type Column - 17% */}
             <div className="col-2">
               <Tag 
                 value={node.type} 
@@ -119,8 +120,20 @@ const CustomTreeTable = ({
               />
             </div>
 
-            {/* Created Date Column - 25% */}
-            <div className="col-3">
+            {/* Created By Column - 17% */}
+            <div className="col-2">
+              <div className="flex align-items-center gap-1 text-600 text-sm">
+                <i className="pi pi-user text-xs"></i>
+                <span>{
+                  node.owner_name ||
+                  users.find(u => u.id === node.owner_id)?.name ||
+                  'Unknown'
+                }</span>
+              </div>
+            </div>
+
+            {/* Created Date Column - 17% */}
+            <div className="col-2">
               <div className="flex align-items-center gap-1 text-600 text-sm">
                 <i className="pi pi-calendar text-xs"></i>
                 <span>{formatDate(node.created_at)}</span>
@@ -283,9 +296,10 @@ const CustomTreeTable = ({
       {/* Header */}
       <div className="custom-tree-header surface-100 border-bottom-2 surface-border py-2 px-2">
         <div className="grid font-semibold text-900 text-sm">
-          <div className="col-5">Name</div>
+          <div className="col-4">Name</div>
           <div className="col-2">Type</div>
-          <div className="col-3">Created Date</div>
+          <div className="col-2">Created By</div>
+          <div className="col-2">Created Date</div>
           <div className="col-2 text-right">Actions</div>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { log } from "console";
 import * as uploadService from "../services/uploadService.js";
+import * as permissionService from "../services/permissionService.js";
 import fs from "fs";
 import path from "path";
 
@@ -9,7 +10,16 @@ export const uploadFile = async (req, res) => {
       return res.status(400).json({ error: "No file uploaded" });
     }
     const { parent_id } = req.body;
+    const userId = req.user?.id;
     const file = req.file;
+
+    // Require explicit upload permission on parent folder
+    if (parent_id) {
+      const hasUploadPermission = await permissionService.checkUserPermission(userId, parent_id, 'upload');
+      if (!hasUploadPermission) {
+        return res.status(403).json({ error: "You do not have permission to upload files in this folder" });
+      }
+    }
     const result = await uploadService.saveUploadedFile({
       filename: file.filename,
       originalName: file.originalname,
@@ -17,6 +27,7 @@ export const uploadFile = async (req, res) => {
       parent_id: parent_id || null,
       fileSize: file.size,
       mimeType: file.mimetype,
+      owner_id: userId,
     });
     res.status(201).json(result);
 
@@ -34,8 +45,17 @@ export const uploadMultipleFiles = async (req, res) => {
     }
 
     const { parent_id } = req.body;
+    const userId = req.user?.id;
     const results = [];
     const errors = [];
+
+    // Require explicit upload permission on parent folder
+    if (parent_id) {
+      const hasUploadPermission = await permissionService.checkUserPermission(userId, parent_id, 'upload');
+      if (!hasUploadPermission) {
+        return res.status(403).json({ error: "You do not have permission to upload files in this folder" });
+      }
+    }
 
     for (const file of req.files) {
       try {
@@ -46,6 +66,7 @@ export const uploadMultipleFiles = async (req, res) => {
           parent_id: parent_id || null,
           fileSize: file.size,
           mimeType: file.mimetype,
+          owner_id: userId,
         });
         results.push(result);
       } catch (err) {

@@ -105,6 +105,9 @@ const structureSlice = createSlice({
     setSelectedNode: (state, action) => {
       state.selectedNode = action.payload;
     },
+    setTree: (state, action) => {
+      state.tree = action.payload;
+    },
     toggleNodeExpansion: (state, action) => {
       const nodeId = action.payload;
       if (state.expandedNodes.includes(nodeId)) {
@@ -207,6 +210,6 @@ const structureSlice = createSlice({
   },
 });
 
-export const { setSelectedNode, toggleNodeExpansion, clearError } = structureSlice.actions;
+export const { setSelectedNode, setTree, toggleNodeExpansion, clearError } = structureSlice.actions;
 export default structureSlice.reducer;
 
