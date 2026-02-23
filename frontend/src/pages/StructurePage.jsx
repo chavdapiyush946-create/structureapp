@@ -106,6 +106,50 @@ const StructurePage = () => {
 
     setCreatingNode(true);
 
+    // If type is "file" and a file is selected, upload it instead
+    if (formData.type === 'file' && selectedFiles.length > 0) {
+      try {
+        const formDataUpload = new FormData();
+        formDataUpload.append('files', selectedFiles[0]);
+        
+        // Ensure custom name has file extension
+        let customName = formData.name.trim();
+        const originalExt = selectedFiles[0].name.split('.').pop();
+        if (originalExt && !customName.endsWith(`.${originalExt}`)) {
+          customName = `${customName}.${originalExt}`;
+        }
+        
+        formDataUpload.append('customName', customName);
+        if (formData.parent_id) {
+          formDataUpload.append('parent_id', formData.parent_id);
+        }
+
+        const { data: result } = await api.post("/upload-multiple", formDataUpload, {
+          headers: { "Content-Type": "multipart/form-data" }
+        });
+
+        if (result.success > 0) {
+          toast.success('File uploaded successfully!');
+          if (formData.parent_id) {
+            setExpandedNodes(prev => new Set([...prev, formData.parent_id]));
+          }
+          await dispatch(fetchStructure());
+          setShowCreateDialog(false);
+          setSelectedFiles([]);
+          resetForm();
+        } else {
+          toast.error('Failed to upload file');
+        }
+      } catch (error) {
+        console.error('upload error', error);
+        const msg = error.response?.data?.error || error.response?.data?.message || error.message || 'Failed to upload file';
+        toast.error(msg);
+      } finally {
+        setCreatingNode(false);
+      }
+      return;
+    }
+
     const nodeData = {
       name: formData.name.trim(),
       type: formData.type,
@@ -462,6 +506,45 @@ const StructurePage = () => {
               />
             </div>
 
+            {/* Show file upload when type is "file" */}
+            {formData.type === 'file' && (
+              <div className="field">
+                <label className="font-semibold text-900 mb-2 block">Upload File (Optional)</label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      setSelectedFiles([file]);
+                      // Auto-fill name from filename if empty
+                      if (!formData.name) {
+                        setFormData({ ...formData, name: file.name });
+                      }
+                    }
+                  }}
+                  style={{
+                    padding: '0.75rem',
+                    border: '1px solid #ced4da',
+                    borderRadius: '8px',
+                    width: '100%',
+                    fontSize: '1rem'
+                  }}
+                />
+                {selectedFiles.length > 0 && (
+                  <div className="mt-2 p-2 surface-100 border-round">
+                    <div className="flex align-items-center gap-2">
+                      <i className="pi pi-file text-primary"></i>
+                      <span className="text-sm font-medium">{selectedFiles[0].name}</span>
+                      <span className="text-xs text-500 ml-auto">
+                        {(selectedFiles[0].size / 1024).toFixed(2)} KB
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {parentForNewNode && (
               <div className="field">
                 <label className="font-semibold text-900 mb-2 block">Parent Folder</label>
@@ -707,35 +790,41 @@ const StructurePage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {folderUsers.map((user) => (
-                    <tr key={user.id} style={{ borderBottom: '1px solid #dee2e6', backgroundColor: permissionChanges[user.id] ? '#fff3cd' : 'transparent' }}>
-                      <td style={{ padding: '12px' }}>
-                        <div className="flex flex-column">
-                          <span className="font-semibold">{user.name}</span>
-                          <span className="text-sm text-600">{user.email}</span>
-                        </div>
-                      </td>
-                      {['can_view', 'can_edit', 'can_delete', 'can_create', 'can_upload'].map((perm) => (
-                        <td key={`${user.id}-${perm}`} style={{ padding: '12px', textAlign: 'center' }}>
-                          <input
-                            type="checkbox"
-                            id={`${user.id}-${perm}`}
-                            checked={permissionChanges[user.id]?.[perm] ?? user[perm] ?? false}
-                            onChange={(e) => {
-                              setPermissionChanges({
-                                ...permissionChanges,
-                                [user.id]: {
-                                  ...(permissionChanges[user.id] || {}),
-                                  [perm]: e.target.checked,
-                                }
-                              });
-                            }}
-                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                          />
+                  {folderUsers.map((user) => {
+                    const isCurrentUser = currentUserId && user.id === currentUserId;
+                    const rowBg = isCurrentUser ? '#f5f5f5' : (permissionChanges[user.id] ? '#fff3cd' : 'transparent');
+                    return (
+                      <tr key={user.id} style={{ borderBottom: '1px solid #dee2e6', backgroundColor: rowBg, opacity: isCurrentUser ? 0.85 : 1 }}>
+                        <td style={{ padding: '12px' }}>
+                          <div className="flex flex-column" style={isCurrentUser ? { pointerEvents: 'none' } : {}}>
+                            <span className="font-semibold">{user.name}</span>
+                            <span className="text-sm text-600">{user.email}</span>
+                          </div>
                         </td>
-                      ))}
-                    </tr>
-                  ))}
+                        {['can_view', 'can_edit', 'can_delete', 'can_create', 'can_upload'].map((perm) => (
+                          <td key={`${user.id}-${perm}`} style={{ padding: '12px', textAlign: 'center' }}>
+                            <input
+                              type="checkbox"
+                              id={`${user.id}-${perm}`}
+                              checked={isCurrentUser ? true : (permissionChanges[user.id]?.[perm] ?? user[perm] ?? false)}
+                              disabled={isCurrentUser}
+                              onChange={(e) => {
+                                if (isCurrentUser) return;
+                                setPermissionChanges({
+                                  ...permissionChanges,
+                                  [user.id]: {
+                                    ...(permissionChanges[user.id] || {}),
+                                    [perm]: e.target.checked,
+                                  }
+                                });
+                              }}
+                              style={{ width: '18px', height: '18px', cursor: isCurrentUser ? 'not-allowed' : 'pointer' }}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -762,6 +851,8 @@ const StructurePage = () => {
                   let savedCount = 0;
                   // Save all permission changes
                   for (const userId in permissionChanges) {
+                    // Skip saving changes for the currently logged-in user
+                    if (parseInt(userId) === currentUserId) continue;
                     const originalUser = folderUsers.find(u => u.id === parseInt(userId));
                     if (originalUser) {
                       // Check if any actual changes were made for this user
@@ -800,6 +891,8 @@ const StructurePage = () => {
                   setPermissionChanges({});
                   // Refresh folder users
                   await dispatch(fetchFolderUsers(selectedNode.id));
+                  // Refresh the tree to show updated permissions
+                  await dispatch(fetchStructure());
                 } catch (err) {
                   console.error(err);
                   toast.error('Failed to update permissions');

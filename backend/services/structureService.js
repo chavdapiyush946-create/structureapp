@@ -1,3 +1,4 @@
+
 import db from "../config/db.js";
 import { promisify } from "util";
 import path from "path";
@@ -32,19 +33,29 @@ export const createNode = async ({ name, type, parent_id, file_path = null, owne
   }
 
   // check permission on parent if provided
+  let effectiveOwnerId = owner_id;
+  let parentOwnerId = null;
+  
   if (parent_id) {
     const parentRows = await query("SELECT * FROM structure WHERE id = ?", [parent_id]);
     if (!parentRows.length) {
       throw new Error("Parent folder not found");
     }
     const parent = parentRows[0];
-    // if owner_id column is missing it'll be undefined
-    if (parent.owner_id !== owner_id && owner_id) {
+    parentOwnerId = parent.owner_id;
+    
+    // ✅ Check if user is the parent's owner
+    const isParentOwner = parentOwnerId && parentOwnerId === owner_id;
+    
+    if (!isParentOwner && owner_id) {
+      // User doesn't own parent: check if they have create permission
       const { checkUserPermission } = await import("./permissionService.js");
       const allowed = await checkUserPermission(owner_id, parent_id, 'create');
       if (!allowed) {
         throw new Error("You do not have permission to create inside this folder");
       }
+      // Don't assign ownership to child if user doesn't own parent
+      effectiveOwnerId = null;
     }
   }
 
@@ -55,14 +66,62 @@ export const createNode = async ({ name, type, parent_id, file_path = null, owne
   `;
 
   try {
-    const result = await query(sql, [name, type, parent_id || null, file_path, owner_id || null]);
+    const result = await query(sql, [name, type, parent_id || null, file_path, effectiveOwnerId || null]);
+    const newNodeId = result.insertId;
+    
+    // ✅ If user doesn't own parent, inherit their parent permissions on the child
+    if (parent_id && effectiveOwnerId === null && owner_id) {
+      try {
+        // Get parent permissions for this user
+        const parentPerms = await query(
+          `SELECT can_view, can_edit, can_delete, can_create, can_upload
+           FROM permissions 
+           WHERE folder_id = ? AND user_id = ?`,
+          [parent_id, owner_id]
+        );
+        
+        // If user has explicit permissions on parent, grant same on child
+        if (parentPerms && parentPerms.length > 0) {
+          const perm = parentPerms[0];
+          console.log(`Inheriting permissions for user ${owner_id} on child ${newNodeId}:`, {
+            can_view: perm.can_view,
+            can_edit: perm.can_edit,
+            can_delete: perm.can_delete,
+            can_create: perm.can_create,
+            can_upload: perm.can_upload
+          });
+          
+          await query(
+            `INSERT INTO permissions 
+              (folder_id, user_id, can_view, can_edit, can_delete, can_create, can_upload, granted_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              newNodeId,
+              owner_id,
+              perm.can_view || 0,
+              perm.can_edit || 0,
+              perm.can_delete || 0,
+              perm.can_create || 0,
+              perm.can_upload || 0,
+              owner_id
+            ]
+          );
+        } else {
+          console.log(`No parent permissions found for user ${owner_id} on parent ${parent_id}`);
+        }
+      } catch (permErr) {
+        console.warn(`Could not inherit parent permissions for user ${owner_id}:`, permErr.message);
+        // Continue - permissions table might not exist or permissions might not be set
+      }
+    }
+    
     return { 
-      id: result.insertId, 
+      id: newNodeId, 
       name, 
       type, 
       parent_id: parent_id || null,
       file_path,
-      owner_id,
+      owner_id: effectiveOwnerId,
       created_at: new Date()
     };
   } catch (err) {
@@ -174,7 +233,7 @@ export const getTree = async (userId) => {
           tree.push(node);
         } else {
           const parent = map.get(node.parent_id);
-          // if (parent) parent.children.push(node);
+          if (parent) parent.children.push(node);
         }
       }
       return tree;
@@ -359,5 +418,3 @@ export const getNodeChildren = async (folderId, userId) => {
     throw new Error("Failed to fetch children");
   }
 };
-
-

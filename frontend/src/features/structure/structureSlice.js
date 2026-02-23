@@ -53,7 +53,7 @@ export const fetchFolderChildren = createAsyncThunk(
   "structure/fetchChildren",
   async (folderId, { rejectWithValue }) => {
     try {
-      const response = await api.get(`/structure/${folderId}/children`);
+      const response = await api.get(`/structure/${folderId}`);
       return { folderId, children: response.data };
     } catch (error) {
       return rejectWithValue(error.response?.data?.error || "Failed to fetch children");

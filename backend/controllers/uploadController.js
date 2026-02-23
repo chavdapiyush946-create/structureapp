@@ -44,7 +44,7 @@ export const uploadMultipleFiles = async (req, res) => {
       return res.status(400).json({ error: "No files uploaded" });
     }
 
-    const { parent_id } = req.body;
+    const { parent_id, customName } = req.body;
     const userId = req.user?.id;
     const results = [];
     const errors = [];
@@ -59,9 +59,12 @@ export const uploadMultipleFiles = async (req, res) => {
 
     for (const file of req.files) {
       try {
+        // Use custom name if provided (for single file upload), otherwise use original name
+        const displayName = customName && req.files.length === 1 ? customName : file.originalname;
+        
         const result = await uploadService.saveUploadedFile({
           filename: file.filename,
-          originalName: file.originalname,
+          originalName: displayName, // Use custom name here
           filePath: file.path,
           parent_id: parent_id || null,
           fileSize: file.size,

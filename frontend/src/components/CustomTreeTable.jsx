@@ -166,7 +166,7 @@ const CustomTreeTable = ({
                         style={{ width: '1.75rem', height: '1.75rem' }}
                       />
                     )}
-                    {(node.can_upload || node.can_create || (currentUserId && node.owner_id === currentUserId)) && (
+                    {(node.can_upload || (currentUserId && node.owner_id === currentUserId)) && (
                       <Button
                         icon="pi pi-upload"
                         className="p-button-rounded p-button-text p-button-info p-button-sm"

@@ -85,22 +85,22 @@ export const checkUserPermission = async (userId, folderId, action) => {
     // Get parent chain once
     const parentChain = await getParentChain(folderId);
     
-    // Check if user owns any folder in the chain
-    for (const id of parentChain) {
-      try {
-        const folderRows = await query(
-          "SELECT owner_id FROM structure WHERE id = ?",
-          [id]
-        );
-        if (folderRows.length && folderRows[0].owner_id === userId) {
-          return true;
-        }
-      } catch (err) {
-        // owner_id column might not exist, continue
+    // ✅ ONLY grant full permissions if user OWNS the folder itself
+    // (not parent folders, only the specific folder being checked)
+    try {
+      const folderRows = await query(
+        "SELECT owner_id FROM structure WHERE id = ?",
+        [folderId]
+      );
+      if (folderRows.length && folderRows[0].owner_id === userId) {
+        return true;  // User owns this specific folder - full access
       }
+    } catch (err) {
+      // owner_id column might not exist, continue
     }
     
-    // Check explicit permissions on any folder in the chain (inherited)
+    // ✅ Check explicit permissions only on the folder itself and parents
+    // (Permission inheritance: if you have permission on parent, you have it on child)
     for (const id of parentChain) {
       if (await hasPerm(id)) {        
         return true;
@@ -186,4 +186,3 @@ export const getUsersWithPermissionsForFolder = async (folderId) => {
     throw err;
   }
 };
-

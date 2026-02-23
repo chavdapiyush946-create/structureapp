@@ -4,7 +4,7 @@
   "description": "",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
+    "start": "nodemon server.js",
     "dev": "nodemon server.js",
     "migrate:date": "node migrations/runDateMigration.js",
     "migrate:structure": "node migrations/runStructureMigration.js"
